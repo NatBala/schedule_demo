@@ -9,6 +9,10 @@ import logging
 import threading # Use standard threading
 from queue import Queue # Use standard thread-safe queue
 import re # <<< Import regex
+import boto3
+from botocore.exceptions import ClientError
+from datetime import datetime, timedelta
+import uuid
 
 from flask import Flask, render_template, request, send_from_directory
 from flask_socketio import SocketIO, emit
@@ -36,6 +40,13 @@ INPUT_API_FORMAT_STRING = "pcm16"
 OUTPUT_API_FORMAT_STRING = "pcm16"
 ASSUMED_OUTPUT_SAMPLE_RATE = 24000
 
+# --- AWS SES Configuration ---
+AWS_ACCESS_KEY = "YOUR_AWS_ACCESS_KEY_HERE"
+AWS_SECRET_KEY = "YOUR_AWS_SECRET_KEY_HERE"
+AWS_REGION = "us-east-2"
+SENDER_EMAIL = "your_sender@email.com"
+RECIPIENT_EMAIL = "your_recipient@email.com"
+
 # --- Load ETF Corpus ---
 def load_etf_corpus():
     try:
@@ -46,6 +57,288 @@ def load_etf_corpus():
         return ""
 
 ETF_CORPUS = load_etf_corpus()
+
+# --- Meeting Parsing and Email Functions ---
+def parse_meeting_details(conversation_text):
+    """Extract meeting date, time and details from conversation"""
+    # Look for common date/time patterns
+    import re
+    from datetime import datetime, timedelta
+    
+    # Patterns for days of the week
+    day_patterns = {
+        'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3, 
+        'friday': 4, 'saturday': 5, 'sunday': 6
+    }
+    
+    # Look for day and time patterns
+    meeting_info = {
+        'day': None,
+        'time': None,
+        'date': None,
+        'advisor_name': 'Financial Advisor',
+        'advisor_email': RECIPIENT_EMAIL,
+        'wholesaler_name': 'Sarah Johnson'  # Default wholesaler name
+    }
+    
+    text_lower = conversation_text.lower()
+    
+    # Extract day of week
+    for day_name, day_num in day_patterns.items():
+        if day_name in text_lower:
+            meeting_info['day'] = day_name.capitalize()
+            # Calculate next occurrence of this day
+            today = datetime.now()
+            days_ahead = day_num - today.weekday()
+            if days_ahead <= 0:  # Target day already happened this week
+                days_ahead += 7
+            meeting_info['date'] = today + timedelta(days=days_ahead)
+            break
+    
+    # Extract time patterns (10:30, 2:00, etc.)
+    time_patterns = [
+        r'(\d{1,2}):(\d{2})\s*(am|pm|a\.m\.|p\.m\.)',
+        r'(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.)',
+        r'(\d{1,2}):(\d{2})'
+    ]
+    
+    for pattern in time_patterns:
+        match = re.search(pattern, text_lower)
+        if match:
+            if len(match.groups()) >= 3:  # Hour:minute am/pm
+                hour = int(match.group(1))
+                minute = int(match.group(2))
+                period = match.group(3).replace('.', '').lower()
+                if period in ['pm', 'p.m'] and hour != 12:
+                    hour += 12
+                elif period in ['am', 'a.m'] and hour == 12:
+                    hour = 0
+                meeting_info['time'] = f"{hour:02d}:{minute:02d}"
+            elif len(match.groups()) >= 2:  # Hour am/pm
+                hour = int(match.group(1))
+                period = match.group(2).replace('.', '').lower()
+                if period in ['pm', 'p.m'] and hour != 12:
+                    hour += 12
+                elif period in ['am', 'a.m'] and hour == 12:
+                    hour = 0
+                meeting_info['time'] = f"{hour:02d}:00"
+            break
+    
+    # Try to extract advisor name from conversation
+    # Look for patterns like "I'm [Name]" or "My name is [Name]" or "This is [Name]"
+    name_patterns = [
+        r"my name is\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)?)",
+        r"i'm\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)?)",
+        r"this is\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)?)",
+        r"i am\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)?)"
+    ]
+    
+    for pattern in name_patterns:
+        match = re.search(pattern, text_lower)
+        if match:
+            extracted_name = match.group(1).title()
+            if extracted_name and len(extracted_name) > 2 and extracted_name not in ['The', 'A', 'An']:
+                meeting_info['advisor_name'] = extracted_name
+                break
+    
+    return meeting_info
+
+def generate_calendar_invite(meeting_info):
+    """Generate ICS calendar invite content"""
+    if not meeting_info['date'] or not meeting_info['time']:
+        return None
+    
+    # Parse time and create datetime
+    time_parts = meeting_info['time'].split(':')
+    hour = int(time_parts[0])
+    minute = int(time_parts[1])
+    
+    start_datetime = meeting_info['date'].replace(hour=hour, minute=minute, second=0, microsecond=0)
+    end_datetime = start_datetime + timedelta(minutes=20)  # 20-minute meeting
+    
+    # Format for ICS
+    start_utc = start_datetime.strftime('%Y%m%dT%H%M%S')
+    end_utc = end_datetime.strftime('%Y%m%dT%H%M%S')
+    
+    uid = str(uuid.uuid4())
+    
+    ics_content = f"""BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//American Funds//Meeting Scheduler//EN
+BEGIN:VEVENT
+UID:{uid}
+DTSTAMP:{datetime.now().strftime('%Y%m%dT%H%M%SZ')}
+DTSTART:{start_utc}
+DTEND:{end_utc}
+SUMMARY:American Funds - ETF Discussion Meeting
+DESCRIPTION:Meeting with American Funds wholesaler to discuss ETF solutions and portfolio construction strategies.
+ORGANIZER:mailto:{SENDER_EMAIL}
+ATTENDEE:mailto:{RECIPIENT_EMAIL}
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR"""
+    
+    return ics_content
+
+def send_plain_email(meeting_info, conversation_summary=""):
+    """Send a plain follow-up email using AWS SES"""
+    try:
+        # Create SES client
+        ses_client = boto3.client(
+            'ses',
+            aws_access_key_id=AWS_ACCESS_KEY,
+            aws_secret_access_key=AWS_SECRET_KEY,
+            region_name=AWS_REGION
+        )
+        
+        # Create email subject and body
+        meeting_date = meeting_info['date'].strftime('%A, %B %d, %Y') if meeting_info['date'] else 'TBD'
+        meeting_time = meeting_info['time'] if meeting_info['time'] else 'TBD'
+        advisor_name = meeting_info.get('advisor_name', 'Valued Advisor')
+        wholesaler_name = meeting_info.get('wholesaler_name', 'American Funds Wholesaler')
+        
+        subject = f"Meeting Confirmed - {advisor_name} & American Funds"
+        
+        body_text = f"""Dear {advisor_name},
+
+Thank you for your time today! I've confirmed our meeting as requested.
+
+MEETING CONFIRMED:
+📅 Date: {meeting_date}  
+🕐 Time: {meeting_time}
+⏱️ Duration: 20 minutes
+💻 Format: Virtual
+
+AGENDA:
+• Capital Group ETF performance review
+• Tax-efficient investment strategies  
+• Solutions tailored to your client base
+• Portfolio construction insights
+
+Our wholesaler will be prepared to discuss specific ETF recommendations and how they might fit your clients' situations.
+
+Looking forward to our conversation!
+
+Best regards,
+{wholesaler_name}
+American Funds
+
+---
+This meeting was scheduled during our call today. If you need to reschedule, please reply to this email.
+        """
+        
+        # Send plain email
+        response = ses_client.send_email(
+            Source=SENDER_EMAIL,
+            Destination={'ToAddresses': [RECIPIENT_EMAIL]},
+            Message={
+                'Subject': {'Data': subject},
+                'Body': {
+                    'Text': {'Data': body_text}
+                }
+            }
+        )
+        
+        log.info(f"✅ Follow-up email sent successfully! Message ID: {response['MessageId']}")
+        return True
+        
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        log.error(f"❌ Email Error: {error_code} - {error_message}")
+        return False
+    except Exception as e:
+        log.error(f"❌ Unexpected error sending email: {e}")
+        return False
+
+def send_calendar_invite(meeting_info, conversation_summary=""):
+    """Send calendar invite email using AWS SES"""
+    try:
+        # Create SES client
+        ses_client = boto3.client(
+            'ses',
+            aws_access_key_id=AWS_ACCESS_KEY,
+            aws_secret_access_key=AWS_SECRET_KEY,
+            region_name=AWS_REGION
+        )
+        
+        # Generate calendar invite
+        ics_content = generate_calendar_invite(meeting_info)
+        if not ics_content:
+            log.error("Could not generate calendar invite - missing date/time info")
+            return False
+        
+        # Create email subject and body
+        meeting_date = meeting_info['date'].strftime('%A, %B %d, %Y') if meeting_info['date'] else 'TBD'
+        meeting_time = meeting_info['time'] if meeting_info['time'] else 'TBD'
+        advisor_name = meeting_info.get('advisor_name', 'Valued Advisor')
+        wholesaler_name = meeting_info.get('wholesaler_name', 'American Funds Wholesaler')
+        
+        subject = f"Calendar Invite - American Funds Meeting - {advisor_name}"
+        
+        body_text = f"""Dear {advisor_name},
+
+Thank you for your time today! I've scheduled our 20-minute meeting to discuss American Funds ETF solutions that could benefit your clients.
+
+Meeting Details:
+Date: {meeting_date}
+Time: {meeting_time}
+Duration: 20 minutes
+Format: Virtual (details to follow)
+
+Our wholesaler will be prepared to discuss:
+- Capital Group ETF performance and portfolio construction
+- Tax-efficient investment strategies
+- Solutions tailored to your client base
+
+Looking forward to our conversation!
+
+Best regards,
+{wholesaler_name}
+American Funds
+
+{conversation_summary}
+        """
+        
+        # Send email with calendar attachment using raw email
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from email.mime.application import MIMEApplication
+        
+        # Create multipart message
+        msg = MIMEMultipart()
+        msg['Subject'] = subject
+        msg['From'] = SENDER_EMAIL
+        msg['To'] = RECIPIENT_EMAIL
+        
+        # Add text body
+        msg.attach(MIMEText(body_text, 'plain'))
+        
+        # Add ICS calendar attachment
+        if ics_content:
+            ics_attachment = MIMEApplication(ics_content.encode('utf-8'))
+            ics_attachment.add_header('Content-Disposition', 'attachment', filename='meeting.ics')
+            ics_attachment.add_header('Content-Type', 'text/calendar; method=REQUEST; name="meeting.ics"')
+            msg.attach(ics_attachment)
+        
+        # Send raw email
+        response = ses_client.send_raw_email(
+            Source=SENDER_EMAIL,
+            Destinations=[RECIPIENT_EMAIL],
+            RawMessage={'Data': msg.as_string()}
+        )
+        
+        log.info(f"✅ Calendar invite sent successfully! Message ID: {response['MessageId']}")
+        return True
+        
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        log.error(f"❌ Email Error: {error_code} - {error_message}")
+        return False
+    except Exception as e:
+        log.error(f"❌ Unexpected error sending email: {e}")
+        return False
 
 # --- Advisor Context ---
 ADVISOR_CONTEXT = """
@@ -617,7 +910,7 @@ If the caller corrects any detail, **acknowledge the correction** in a straightf
 4. **Interest Assessment:** Based on responses, gauge genuine interest: "Based on what you're telling me, it sounds like [summarize need]. Is this something you'd be open to exploring further?"
 5. **Only Then Schedule:** If they express interest, offer **two concrete time options** and ask preference.
 6. **Handle Objections Gracefully:** Acknowledge, brief value reframe, offer a low-friction next step (short intro meeting, send agenda, or revisit timing).
-7. **Confirm & Summarize:** Repeat date/time, meeting mode, participants, and best email for the calendar invite.
+7. **Confirm & Summarize:** Repeat date/time, meeting mode. A follow-up email will be sent automatically with meeting details.
 8. **Performance & Compliance:** You CAN discuss performance statistics and fund details, but set boundaries: "I can share the performance numbers and general fund information, but for specific recommendations and how this fits your clients' situations, our wholesaler would be much better positioned to dive deep into that with you."
 9. **DNC & Preferences:** Respect do-not-call requests; offer preferred channel/time for future contact.
 10. **Close Warmly:** "Appreciate your time—looking forward to connecting you with our wholesaler."
@@ -653,7 +946,7 @@ If the caller corrects any detail, **acknowledge the correction** in a straightf
 "Great! How does **Tuesday 10:30am PT** or **Thursday 2:00pm PT** for a **15–20 min** intro sound? Virtual is easiest, but we can meet in person if you prefer."
 
 **Confirm & Close:**
-"Perfect—so we're set for [day/date/time/timezone]. What's the **best email** for the invite? … Thank you! I'll include a brief agenda. Appreciate your time today."
+"Perfect—so we're set for [day/date/time/timezone]. I'm sending you a follow-up email right now with all the details and a brief agenda. Do you have any questions, or is there anything else I can help you with before we wrap up?"
 
 ## Objection Handling (concise, human)
 
@@ -830,6 +1123,37 @@ After questions, **pause**. Let silence work.
                                 follow_up_keywords = ["send", "email", "materials", "meeting", "follow up", "call back", "schedule"]
                                 if turn_user_transcript and any(keyword in turn_user_transcript.lower() for keyword in follow_up_keywords):
                                     log.info(f"[{sid}] User expressed interest in follow-up")
+                                
+                                # Check if meeting was confirmed and send calendar invite
+                                meeting_confirmed_keywords = ["perfect", "great", "sounds good", "confirmed", "set for", "scheduled", "tuesday", "wednesday", "thursday", "friday", "monday"]
+                                assistant_confirmed_meeting = any(keyword in current_assistant_response.lower() for keyword in ["perfect", "great", "we're set", "confirmed", "scheduled"])
+                                
+                                if assistant_confirmed_meeting and any(day in current_assistant_response.lower() for day in ["monday", "tuesday", "wednesday", "thursday", "friday"]):
+                                    log.info(f"[{sid}] Meeting appears to be confirmed - parsing details and sending calendar invite")
+                                    
+                                    # Parse meeting details from the conversation
+                                    full_conversation = current_assistant_response + " " + (turn_user_transcript or "")
+                                    meeting_info = parse_meeting_details(full_conversation)
+                                    
+                                    log.info(f"[{sid}] Parsed meeting info: {meeting_info}")
+                                    
+                                    # Send follow-up email immediately
+                                    def send_email_async():
+                                        try:
+                                            # Send plain follow-up email
+                                            email_success = send_plain_email(meeting_info, full_conversation)
+                                            if email_success:
+                                                log.info(f"[{sid}] Follow-up email sent successfully")
+                                            else:
+                                                log.error(f"[{sid}] Failed to send follow-up email")
+                                                
+                                        except Exception as e:
+                                            log.error(f"[{sid}] Error sending email: {e}")
+                                    
+                                    # Send email in background thread for faster response
+                                    import threading
+                                    email_thread = threading.Thread(target=send_email_async, daemon=True)
+                                    email_thread.start()
                                 
                                 # Signal end of ASSISTANT text stream for this turn
                                 safe_emit('response_text_update', {'text': '', 'is_final': True}, room=sid)
