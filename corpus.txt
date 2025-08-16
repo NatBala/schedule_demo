@@ -1,0 +1,129 @@
+Awesome—here’s a clean, sales-ready knowledge corpus pulled straight from Capital Group’s ETF fund pages. I start with a full “hero card” for **CGUS**, then give concise fact sheets for the rest of the lineup (objective + key facts + performance where the page provides it). Dates matter, so I include the “as of” shown on each page.
+
+---
+
+# Capital Group Core Equity ETF (CGUS) — Deep Dive
+
+**Objective**
+Seeks long-term growth of capital by investing primarily in U.S. equities across the market-cap spectrum; may invest up to 20% in non-U.S. companies. ([CapitalGroup NACG][1])
+
+**Expense ratio:** 0.33% (prospectus). ([CapitalGroup NACG][1])
+**Inception:** 02/22/2022. **Exchange:** NYSE Arca. **CUSIP:** 14020V108. ([CapitalGroup NACG][1])
+**Dividends:** Quarterly (Mar, Jun, Sep, Dec). ([CapitalGroup NACG][1])
+**Managers:** Multiple named PMs; see fund page for the current team and years of experience. ([CapitalGroup NACG][1])
+
+**Performance (as of 07/31/2025)**
+• 1-yr (NAV/Market): **29.43% / 29.42%**
+• Lifetime (NAV/Market): **12.60% / 12.61%** ([CapitalGroup NACG][1])
+
+**Yield (as of 07/31/2025)**
+• 30-Day SEC Yield: **0.66%**. ([CapitalGroup NACG][1])
+
+**Trading stats (as of 08/14/2025)**
+• 30-day median bid/ask spread: **0.02%**
+• Premium/discount: **0.10%** (point-in-time) ([CapitalGroup NACG][1])
+
+**Portfolio snapshot**
+• Asset mix (07/31/2025): U.S. equities 95.8%, Non-U.S. equities 3.1%, Cash & equivalents 1.1%
+• Market-cap mix (07/31/2025): Large 81.3%, Medium 16.7%, Small 2.0% ([CapitalGroup NACG][1])
+
+---
+
+# Quick-Reference: The Rest of Capital Group ETFs
+
+> Tip: All returns below are **month-end** (NAV/Market) where available on the fund page, and **SEC yields** are month-end too; if a fund launched recently, 1-yr returns may not yet be shown on the site.
+
+## Equity
+
+**CGGR — Capital Group Growth ETF**
+Objective: Long-term growth via primarily U.S. growth equities. Dividends: Jun, Dec. Expense: **0.39%**. Inception: **02/22/2022**. 30-day SEC yield: **0.14%** (07/31/2025). Returns (07/31/2025): 1-yr **27.33/27.29%**; lifetime **17.27/17.28%**. ([CapitalGroup NACG][2])
+
+**CGDV — Capital Group Dividend Value ETF**
+Objective: Dividend-oriented U.S. equities with value discipline. Dividends: Mar, Jun, Sep, Dec. Expense: **0.33%**. Inception: **02/22/2022**. 30-day SEC yield: **1.44%** (07/31/2025). Returns (07/31/2025): 1-yr **17.67/17.72%**; lifetime **17.36/17.39%**.
+
+**CGGO — Capital Group Global Growth Equity ETF**
+Objective: Growth stocks of any size around the world. Dividends: Jun, Dec. Expense: **0.47%**. Inception: **02/22/2022**. 30-day SEC yield: **0.73%** (07/31/2025). Returns (07/31/2025): 1-yr **12.56/12.37%**; lifetime **9.51/9.50%**.
+
+**CGXU — Capital Group International Focus Equity ETF**
+Objective: Long-term growth, primarily outside the U.S.; may invest in emerging markets (≤10% normally). Dividends: Jun, Dec. Expense: **0.47%**. Inception: **02/22/2022**. (Performance shown on page; consult fund page for current figures.) ([CapitalGroup NACG][3])
+
+**CGIE — Capital Group International Equity ETF**
+Objective: Prudent growth of capital and conservation of principal; predominantly developed-markets exposure with a smoother full-cycle profile. Dividends: Jun, Dec. Expense: **0.54%**. Inception: **09/26/2023**. 30-day SEC yield: **1.55%** (07/31/2025). Returns (07/31/2025): 1-yr **10.99/10.85%**; lifetime **16.22/16.15%**. ([CapitalGroup NACG][4])
+
+**CGGE — Capital Group Global Equity ETF**
+Objective: Prudent growth & capital preservation; global developed-market tilt. (New 6/27/2024 launch cohort.) See fund page for expenses, dividends, and latest returns. ([CapitalGroup NACG][5])
+
+**CGNG — Capital Group New Geography Equity ETF**
+Objective: Long-term capital appreciation emphasizing companies benefiting from revenue exposure beyond domicile (“new geography” lens). (New 6/27/2024 launch cohort.) See fund page for details and current returns. ([CapitalGroup NACG][6])
+
+**CGGG — Capital Group U.S. Large Growth ETF**
+Objective: Focused, research-intensive U.S. large-cap growth. Dividends: Dec. Expense: **0.39%**. Inception: **06/24/2025**. 30-day SEC yield: **0.19%** (07/31/2025). Returns (07/31/2025): lifetime **8.75/8.63%** (no 1-yr yet). ([CapitalGroup NACG][7])
+
+**CGIC — Capital Group International Core Equity ETF**
+Objective: Long-term growth **and** current income; primarily non-U.S., including emerging markets; tilt to well-established dividend payers. (2024 cohort; performance builds as track record grows.) ([CapitalGroup NACG][8])
+
+**CGCV — Capital Group Conservative Equity ETF**
+Objective: Equity exposure with a defensive, dividend-aware tilt (conservative equity). (2024 cohort.) The consolidated returns page lists CGCV; check it for the current month-end stats. ([CapitalGroup NACG][9])
+
+> Also in the equity family: **CGUS** (core equity; detailed above). See the site’s ETF list for the full ticker roster. ([CapitalGroup NACG][10])
+
+## Tax-Exempt (Municipal)
+
+**CGMU — Capital Group Municipal Income ETF**
+Objective: High level of federally tax-exempt income consistent with capital preservation; flexible across IG and some lower-rated muni sectors. Expense: **0.27%**. Inception: **03/07/2023**. 30-day SEC yield: **3.62%** (07/31/2025). Returns (07/31/2025): 1-yr **1.64/1.38%**; lifetime **5.59/5.63%**. ([CapitalGroup NACG][11])
+
+**CGSM — Capital Group Short Duration Municipal Income ETF**
+Objective: Tax-exempt income with **short duration** profile; generally high-quality short-term munis; aims slightly higher yield than tax-exempt cash with limited rate risk. (2024 cohort; see fund page for latest returns and yields.) ([CapitalGroup NACG][12])
+
+**CGHM — Capital Group Municipal High-Income ETF**
+Objective: High level of federally tax-exempt income, focusing on higher-yielding muni sectors. (2024 cohort; see holdings and distributions for latest details.) ([CapitalGroup NACG][13])
+
+## U.S. Taxable Bond
+
+**CGCP — Capital Group Core Plus Income ETF**
+Objective: Current income & max total return, with flexibility across sectors (can own EM, HY, non-USD opportunistically; ≤35% below-IG). Dividends: **Monthly**. Expense: **0.34%**. Inception: **02/22/2022**. 30-day SEC yield: **5.48%** (07/31/2025). Returns (07/31/2025): 1-yr **4.09/3.95%**; lifetime **1.07/1.06%**. ([CapitalGroup NACG][14])
+
+**CGCB — Capital Group Core Bond ETF**
+Objective: High level of current income consistent with capital preservation; **does not** invest in below-IG debt. (Core bond profile.) See returns/yields pages for current stats. ([CapitalGroup NACG][15])
+
+**CGMS — Capital Group U.S. Multi-Sector Income ETF**
+Objective: Income from a diversified multi-sector U.S. bond portfolio (corporates, securitized, etc.). (See fund page for objective/metrics.) ([CapitalGroup NACG][16])
+
+**CGSD — Capital Group Short Duration Income ETF**
+Objective: Current income with **short duration** and capital preservation; high-quality mix of U.S. gov’t, corporate, ABS/MBS; average duration generally <2 yrs. (Stats on duration/YTW shown on page.) ([CapitalGroup NACG][17])
+
+**CGHY — Capital Group High Yield Bond ETF**
+Objective: High current income; secondarily capital appreciation; broadly diversified **below-IG** debt; may invest in EM. Expense: **0.39%**. Inception: **07/01/2024**. 30-day SEC yield: **5.75%** (07/31/2025). Returns (07/31/2025): lifetime **1.10/1.14%** (no 1-yr yet). ([CapitalGroup NACG][18])
+
+**CGUI — Capital Group Ultra Short Income ETF**
+Objective: Income from high-quality, **ultra-short-duration** U.S. dollar bonds (avg duration \~≤1yr) seeking better return than cash while preserving liquidity. (2024 cohort; see page for latest yield/returns.) ([CapitalGroup NACG][19])
+
+## Global/Non-U.S. Bond
+
+**CGIB — Capital Group International Bond ETF (USD-Hedged)**
+Objective: Income and total return from non-U.S. bonds with **USD hedge**; may invest ≤15% in below-IG; maintains ≥90% USD currency exposure. (Holdings/price history available; check returns page for latest.) ([CapitalGroup NACG][20])
+
+---
+
+## Where to check consolidated numbers quickly
+
+* **ETF Returns (month-end):** Consolidated page listing 25 ETFs with YTD, 1-yr, lifetime, and expense ratios. (Use filters to see monthly or quarterly.) ([CapitalGroup NACG][9])
+* **Daily Prices & 30-day SEC Yields:** Per-ETF view shows NAV/Market Price, distribution rates, and SEC yields. ([CapitalGroup NACG][21])
+* **Symbols & Fund Numbers:** Full ticker roster with CUSIPs. ([CapitalGroup NACG][10])
+* **Launch note:** 7 ETFs (CGGE, CGNG, CGCV, CGIC, CGUI, CGIB, CGHM) joined on **June 27, 2024**; many will not yet show 1-yr returns until they season. ([CapitalGroup NACG][22])
+
+---
+
+## Quick sales angles (advisor FAQ-style)
+
+* **“What makes them ‘active’ ETFs?”**
+  All Capital Group ETFs are actively managed (no index replication), disclose **daily holdings**, and trade intraday; they can show a small premium/discount and tight median spreads (e.g., CGUS 0.02% 30-day median). ([CapitalGroup NACG][14])
+
+* **“How do I position the equity ‘prudent growth’ wrappers (CGIE/CGGE)?”**
+  They explicitly target **smoother full-cycle profiles** with an emphasis on quality and downside capture—good complements to pure-beta international/global exposures. ([CapitalGroup NACG][4])
+
+* **“Who are the portfolio managers?”**
+  Each details page lists current PMs and experience (years at CG and in the industry). Point advisors there for the up-to-date roster. ([CapitalGroup NACG][4])
+
+* **“Where can I pull distributions and tax info?”**
+  Each fund has **historical distributions** and **historical prices** pages; muni funds include AMT notes where relevant. ([CapitalGroup NACG][23])
