@@ -17,6 +17,7 @@ import uuid
 from flask import Flask, render_template, request, send_from_directory
 from flask_socketio import SocketIO, emit
 from dotenv import load_dotenv
+import subprocess  # For Salesforce CLI integration
 
 # --- Load Environment Variables ---
 load_dotenv()
@@ -40,12 +41,18 @@ INPUT_API_FORMAT_STRING = "pcm16"
 OUTPUT_API_FORMAT_STRING = "pcm16"
 ASSUMED_OUTPUT_SAMPLE_RATE = 24000
 
-# --- AWS SES Configuration ---
-AWS_ACCESS_KEY = "YOUR_AWS_ACCESS_KEY_HERE"
-AWS_SECRET_KEY = "YOUR_AWS_SECRET_KEY_HERE"
+# --- AWS SES Configuration (HARDCODED FOR DEMO) ---
+AWS_ACCESS_KEY = "YOUR_AWS_ACCESS_KEY"
+AWS_SECRET_KEY = "YOUR_AWS_SECRET_KEY"
 AWS_REGION = "us-east-2"
-SENDER_EMAIL = "your_sender@email.com"
-RECIPIENT_EMAIL = "your_recipient@email.com"
+SENDER_EMAIL = "achalshahkpmg@outlook.com"
+RECIPIENT_EMAIL = "nbalasubramanian1@KPMG.com"
+
+# --- Salesforce Configuration (for demo) ---
+SALESFORCE_CONTACT_ID = "003gK000007vmQTQAY"  # Demo contact ID
+SALESFORCE_ORG_ALIAS = "my-org"  # Salesforce org alias
+SALESFORCE_ENABLED = True  # Enable/disable Salesforce integration
+SALESFORCE_CLI_PATH = r"C:\Users\nbalasubramanian1\softwares\node-v22.14.0-win-x64\sf.cmd"  # Full path to sf CLI
 
 # --- Load ETF Corpus ---
 def load_etf_corpus():
@@ -76,7 +83,7 @@ def parse_meeting_details(conversation_text):
         'day': None,
         'time': None,
         'date': None,
-        'advisor_name': 'Financial Advisor',
+        'advisor_name': 'Nat',  # Always use Nat as the financial advisor name
         'advisor_email': RECIPIENT_EMAIL,
         'wholesaler_name': 'Sarah Johnson'  # Default wholesaler name
     }
@@ -88,23 +95,29 @@ def parse_meeting_details(conversation_text):
         if day_name in text_lower:
             meeting_info['day'] = day_name.capitalize()
             # Calculate next occurrence of this day
-            today = datetime.now()
+            today = datetime.now().date()  # Get just the date part, no time
+            today_datetime = datetime.combine(today, datetime.min.time())  # Clean datetime at midnight
             days_ahead = day_num - today.weekday()
             if days_ahead <= 0:  # Target day already happened this week
                 days_ahead += 7
-            meeting_info['date'] = today + timedelta(days=days_ahead)
+            meeting_info['date'] = today_datetime + timedelta(days=days_ahead)  # Clean date like test_salesforce.py
             break
     
-    # Extract time patterns (10:30, 2:00, etc.)
+    # Extract time patterns (10:30, 2:00, etc.) - enhanced for better matching
     time_patterns = [
-        r'(\d{1,2}):(\d{2})\s*(am|pm|a\.m\.|p\.m\.)',
-        r'(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.)',
-        r'(\d{1,2}):(\d{2})'
+        r'(\d{1,2}):(\d{2})\s*(am|pm|a\.m\.|p\.m\.)',  # 2:30 pm
+        r'(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.)',          # 2 pm
+        r'(\d{1,2}):(\d{2})',                          # 14:30
+        r'(\d{1,2})\s*p\.?m\.?',                       # 2 p.m. or 2pm
+        r'(\d{1,2})\s*a\.?m\.?'                        # 10 a.m. or 10am
     ]
     
-    for pattern in time_patterns:
+    print(f"🔍 Parsing time from text: '{text_lower[:200]}...'")  # Debug log
+    
+    for i, pattern in enumerate(time_patterns):
         match = re.search(pattern, text_lower)
         if match:
+            print(f"🔍 Pattern {i} matched: {match.groups()}")  # Debug log
             if len(match.groups()) >= 3:  # Hour:minute am/pm
                 hour = int(match.group(1))
                 minute = int(match.group(2))
@@ -114,6 +127,7 @@ def parse_meeting_details(conversation_text):
                 elif period in ['am', 'a.m'] and hour == 12:
                     hour = 0
                 meeting_info['time'] = f"{hour:02d}:{minute:02d}"
+                print(f"🔍 Extracted time (H:M AM/PM): {meeting_info['time']}")
             elif len(match.groups()) >= 2:  # Hour am/pm
                 hour = int(match.group(1))
                 period = match.group(2).replace('.', '').lower()
@@ -122,7 +136,27 @@ def parse_meeting_details(conversation_text):
                 elif period in ['am', 'a.m'] and hour == 12:
                     hour = 0
                 meeting_info['time'] = f"{hour:02d}:00"
+                print(f"🔍 Extracted time (H AM/PM): {meeting_info['time']}")
+            elif 'p' in pattern and len(match.groups()) >= 1:  # Just PM pattern
+                hour = int(match.group(1))
+                if hour != 12:
+                    hour += 12
+                meeting_info['time'] = f"{hour:02d}:00"
+                print(f"🔍 Extracted time (PM only): {meeting_info['time']}")
+            elif 'a' in pattern and len(match.groups()) >= 1:  # Just AM pattern
+                hour = int(match.group(1))
+                if hour == 12:
+                    hour = 0
+                meeting_info['time'] = f"{hour:02d}:00"
+                print(f"🔍 Extracted time (AM only): {meeting_info['time']}")
             break
+    
+    # ALWAYS ensure we have a time string - just like test_salesforce.py
+    if not meeting_info['time']:
+        meeting_info['time'] = '14:00'  # Default to 2 PM like test script
+        print(f"🔍 No time found in text, defaulting to: {meeting_info['time']}")
+    
+    print(f"🔍 Final meeting_info: {meeting_info}")
     
     # Try to extract advisor name from conversation
     # Look for patterns like "I'm [Name]" or "My name is [Name]" or "This is [Name]"
@@ -194,7 +228,7 @@ def send_plain_email(meeting_info, conversation_summary=""):
         # Create email subject and body
         meeting_date = meeting_info['date'].strftime('%A, %B %d, %Y') if meeting_info['date'] else 'TBD'
         meeting_time = meeting_info['time'] if meeting_info['time'] else 'TBD'
-        advisor_name = meeting_info.get('advisor_name', 'Valued Advisor')
+        advisor_name = meeting_info.get('advisor_name', 'Nat')
         wholesaler_name = meeting_info.get('wholesaler_name', 'American Funds Wholesaler')
         
         subject = f"Meeting Confirmed - {advisor_name} & American Funds"
@@ -271,7 +305,7 @@ def send_calendar_invite(meeting_info, conversation_summary=""):
         # Create email subject and body
         meeting_date = meeting_info['date'].strftime('%A, %B %d, %Y') if meeting_info['date'] else 'TBD'
         meeting_time = meeting_info['time'] if meeting_info['time'] else 'TBD'
-        advisor_name = meeting_info.get('advisor_name', 'Valued Advisor')
+        advisor_name = meeting_info.get('advisor_name', 'Nat')
         wholesaler_name = meeting_info.get('wholesaler_name', 'American Funds Wholesaler')
         
         subject = f"Calendar Invite - American Funds Meeting - {advisor_name}"
@@ -339,6 +373,199 @@ American Funds
     except Exception as e:
         log.error(f"❌ Unexpected error sending email: {e}")
         return False
+
+# --- Salesforce Integration Functions ---
+def check_salesforce_cli():
+    """Check if Salesforce CLI is installed and authenticated"""
+    try:
+        # Check if SF CLI is installed
+        result = subprocess.run(
+            [SALESFORCE_CLI_PATH, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        if result.returncode == 0:
+            log.info(f"Salesforce CLI found: {result.stdout.strip()}")
+            
+            # Check if authenticated to org
+            auth_result = subprocess.run(
+                [SALESFORCE_CLI_PATH, "org", "list", "--json"],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if auth_result.returncode == 0:
+                auth_data = json.loads(auth_result.stdout)
+                orgs = auth_data.get('result', {}).get('nonScratchOrgs', [])
+                for org in orgs:
+                    if org.get('alias') == SALESFORCE_ORG_ALIAS:
+                        log.info(f"✅ Authenticated to Salesforce org: {SALESFORCE_ORG_ALIAS}")
+                        return True
+                log.warning(f"⚠️ Salesforce org '{SALESFORCE_ORG_ALIAS}' not found in authenticated orgs")
+            return False
+        else:
+            log.warning("Salesforce CLI not found")
+            return False
+    except Exception as e:
+        log.error(f"Error checking Salesforce CLI: {e}")
+        return False
+
+def create_salesforce_event(meeting_info):
+    """Create an Event (visit activity) in Salesforce"""
+    log.info(f"🔵 create_salesforce_event called with: {meeting_info}")
+    
+    if not SALESFORCE_ENABLED:
+        log.info("Salesforce integration disabled")
+        return None
+        
+    try:
+        # Format dates for Salesforce
+        if not meeting_info.get('date'):
+            log.error(f"❌ Cannot create Salesforce event - missing date info. Meeting info: {meeting_info}")
+            return None
+            
+        # Parse time and create datetime
+        meeting_date = meeting_info['date']
+        meeting_time = meeting_info.get('time')
+        
+        # Handle datetime object or string date
+        if isinstance(meeting_date, str):
+            meeting_date = datetime.strptime(meeting_date, '%Y-%m-%d')
+        
+        # Always ensure we have a clean, proper meeting time
+        if meeting_time and ':' in meeting_time:
+            # Parse the specific time mentioned
+            time_parts = meeting_time.split(':')
+            hour = int(time_parts[0])
+            minute = int(time_parts[1][:2]) if len(time_parts) > 1 else 0
+            log.info(f"🔵 Using parsed time: {hour}:{minute:02d}")
+        else:
+            # Default to 2 PM for any meeting without specific time
+            hour = 14
+            minute = 0
+            log.info(f"🔵 Using default time: {hour}:{minute:02d} (2 PM)")
+        
+        # Create clean start datetime - always use date portion but clean time
+        if isinstance(meeting_date, datetime):
+            start_datetime = meeting_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        else:
+            start_datetime = meeting_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            
+        # Create end datetime (1 hour meeting)
+        end_datetime = start_datetime + timedelta(hours=1)
+        
+        # Format for Salesforce (ISO 8601 format)
+        start_dt_str = start_datetime.strftime('%Y-%m-%dT%H:%M:%S.000+0000')
+        end_dt_str = end_datetime.strftime('%Y-%m-%dT%H:%M:%S.000+0000')
+        
+        # Prepare subject and description
+        advisor_name = meeting_info.get('advisor_name', 'Nat')
+        subject = f"American Funds ETF Discussion - {advisor_name}"
+        description = f"Virtual meeting with {advisor_name} to discuss American Funds ETF solutions, portfolio construction, and tax-efficient investment strategies."
+        
+        # Build Salesforce CLI command
+        cmd = [
+            SALESFORCE_CLI_PATH, "data", "create", "record",
+            "--sobject", "Event",
+            "--values",
+            f"Subject='{subject}' StartDateTime='{start_dt_str}' EndDateTime='{end_dt_str}' WhoId='{SALESFORCE_CONTACT_ID}' Description='{description}' Location='Virtual Meeting' ShowAs='Busy'",
+            "--target-org", SALESFORCE_ORG_ALIAS,
+            "--json"
+        ]
+        
+        log.info(f"🔵 Creating Salesforce Event: {subject} at {start_dt_str}")
+        log.info(f"🔵 Command: {' '.join(cmd)}")
+        
+        # Execute command
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        
+        log.info(f"🔵 Salesforce CLI result: returncode={result.returncode}, stdout={result.stdout}, stderr={result.stderr}")
+        
+        if result.returncode == 0:
+            response_data = json.loads(result.stdout)
+            if response_data.get('status') == 0:
+                event_id = response_data.get('result', {}).get('id')
+                log.info(f"✅ Salesforce Event created successfully! ID: {event_id}")
+                return event_id
+            else:
+                log.error(f"Salesforce Event creation failed: {response_data.get('message')}")
+                return None
+        else:
+            log.error(f"Salesforce CLI error: {result.stderr}")
+            return None
+            
+    except json.JSONDecodeError as e:
+        log.error(f"Failed to parse Salesforce response: {e}")
+        return None
+    except Exception as e:
+        log.error(f"Error creating Salesforce event: {e}")
+        log.error(traceback.format_exc())
+        return None
+
+def send_meeting_confirmation(meeting_info, conversation_summary=""):
+    """Send email and create Salesforce event when meeting is confirmed"""
+    log.info(f"🟡 ===== STARTING MEETING CONFIRMATION WORKFLOW =====")
+    log.info(f"🟡 send_meeting_confirmation called with: {meeting_info}")
+    
+    results = {
+        'email_sent': False,
+        'salesforce_created': False
+    }
+    
+    # STEP 1: Send email (existing functionality)
+    log.info("🟡 ===== STEP 1: SENDING EMAIL =====")
+    try:
+        log.info("🟡 About to call send_plain_email...")
+        email_success = send_plain_email(meeting_info, conversation_summary)
+        results['email_sent'] = email_success
+        if email_success:
+            log.info("✅ Email confirmation sent successfully")
+        else:
+            log.warning("⚠️ Email sending failed")
+    except Exception as e:
+        log.error(f"❌ Exception during email sending: {e}")
+        log.error(traceback.format_exc())
+    
+    log.info(f"🟡 Email step completed. Result: {results['email_sent']}")
+    
+    # STEP 2: Create Salesforce event (new functionality) - ALWAYS ATTEMPT REGARDLESS OF EMAIL STATUS
+    log.info("🟡 ===== STEP 2: CREATING SALESFORCE EVENT =====")
+    try:
+        log.info("🟡 About to attempt Salesforce event creation...")
+        log.info(f"🟡 SALESFORCE_ENABLED = {SALESFORCE_ENABLED}")
+        
+        if SALESFORCE_ENABLED:
+            log.info("🟡 Calling create_salesforce_event...")
+            event_id = create_salesforce_event(meeting_info)
+            log.info(f"🟡 create_salesforce_event returned: {event_id}")
+            
+            results['salesforce_created'] = event_id is not None
+            if event_id:
+                log.info(f"✅ Salesforce visit activity created successfully! ID: {event_id}")
+            else:
+                log.error("❌ Failed to create Salesforce event - no event ID returned")
+        else:
+            log.warning("⚠️ Salesforce integration disabled - skipping Salesforce update")
+    except Exception as e:
+        log.error(f"❌ Exception during Salesforce event creation: {e}")
+        log.error(traceback.format_exc())
+    
+    log.info(f"🟡 Salesforce step completed. Result: {results['salesforce_created']}")
+    
+    # FINAL RESULTS
+    log.info("🟡 ===== FINAL WORKFLOW RESULTS =====")
+    log.info(f"🟡 Email sent: {results['email_sent']}")
+    log.info(f"🟡 Salesforce created: {results['salesforce_created']}")
+    log.info(f"🟡 Complete results: {results}")
+    log.info("🟡 ===== MEETING CONFIRMATION WORKFLOW COMPLETE =====")
+    
+    return results
 
 # --- Advisor Context ---
 ADVISOR_CONTEXT = """
@@ -852,6 +1079,24 @@ async def openai_session_task(sid, client_async_input_queue):
     loaded_advisor_name = None # <<< Track loaded advisor
 
     session_instructions = f"""
+You are Sarah, a sales specialist at American Funds calling Nat about ETF products.
+
+===== MANDATORY OPENING SCRIPT =====
+You MUST use these EXACT words to start EVERY conversation. Copy this word-for-word:
+
+"Hi Nat this is Sarah from American Funds. I'm calling because we noticed you've been looking at ETF products on our webpage, and many advisors like yourself are looking for better ETF solutions. Do you have a few minutes to discuss what you're seeing with your clients right now?"
+
+===== FORBIDDEN WORDS/PHRASES =====
+- NEVER say "Hi there" 
+- NEVER say "Alex" or any name other than "Nat"
+- NEVER say "with American Funds" - always say "from American Funds"
+- NEVER use generic greetings
+
+===== YOUR IDENTITY =====
+- Your name: Sarah (always)
+- Advisor name: Nat (always)
+- Company: American Funds
+
 # Personality and Tone
 
 ## Identity
@@ -875,7 +1120,7 @@ Warm, polished, and conversational. Sound like a well-prepared professional who'
 **Measured and positive.** Start at moderate energy; mirror the prospect's pace and intensity. Avoid hype.
 
 ## Level of Formality
-**Professional-casual.** "Good morning—this is Alex with American Funds…" vs. overly formal script reading.
+**Professional-casual.** "Hi Nat this is Sarah from American Funds…" vs. overly formal script reading.
 
 ## Level of Emotion
 **Empathetic and steady.** Acknowledge constraints ("Totally understand you're between meetings"), then offer crisp options.
@@ -915,16 +1160,7 @@ If the caller corrects any detail, **acknowledge the correction** in a straightf
 9. **DNC & Preferences:** Respect do-not-call requests; offer preferred channel/time for future contact.
 10. **Close Warmly:** "Appreciate your time—looking forward to connecting you with our wholesaler."
 
-## Call Flow (Live Answer)
-
-**Opening (7–10 seconds):**
-"Hi there, this is [Your Name] with **American Funds**. I'm calling because many advisors are looking for better ETF solutions. Do you have a few minutes to discuss what you're seeing with your clients right now?"
-
-**Wait for Permission:**
-- If YES: "Great! Let me ask you a few quick questions..."
-- If NO/BUSY: "No problem at all. What would be a better time for you?"
-
-**Discovery Phase (Ask questions one at a time, listen to responses, build rapport):**
+## Discovery Phase (Ask questions one at a time, listen to responses, build rapport):
 1. "What are your clients most concerned about in today's market environment?"
 2. "Are you currently using ETFs in your client portfolios? Which ones are working well for you?"
 3. "What gaps do you see in your current ETF lineup—maybe income, growth, or international exposure?"
@@ -934,6 +1170,7 @@ If the caller corrects any detail, **acknowledge the correction** in a straightf
 6. "What's driving the most interest from your clients this quarter—income generation, growth, or capital preservation?"
 
 **Build Personal Connection Throughout:**
+- Reference webpage interest: "That's exactly what I thought you might be interested in, Nat, based on what you were looking at on our site..."
 - Comment on market trends: "I'm hearing that a lot from advisors lately..."
 - Share observations: "You know, it's interesting - most advisors I talk to are seeing similar client concerns..."
 - Find common ground: "That makes total sense, especially with what we've seen in the markets this year..."
@@ -965,34 +1202,20 @@ If the caller corrects any detail, **acknowledge the correction** in a straightf
 **Performance/specific product questions.**
 "Absolutely! I can share the performance numbers with you. For example, our CGUS returned 29.43% over the past year, and CGGR has done 27.33%. I can give you all the stats, but for diving into how these might specifically fit your client situations and portfolio construction, our wholesaler would be perfect for that conversation."
 
-## Language Do/Don't
-
-**Do:**
-"Does **Tuesday 10:30 PT** or **Thursday 2:00 PT** work for a quick **15–20 min** intro?"
-"Happy to tailor materials to **your client mix**."
-
-**Don't:**
-Over-qualify upfront, read long pitches, or imply investment advice.
-Use jargon without context or dominate the conversation.
-
-### Micro-Coaching for "Real" Voice
-Use brief back-channels: "got it," "that helps," "understood."
-Smile on greetings/thanks; neutral for details; warmer on close.
-Avoid identical sentence lengths; vary cadence.
-After questions, **pause**. Let silence work.
-
 **Advisor Profiles Available:**
 {ADVISOR_CONTEXT}
 
 **ETF Knowledge Base:**
 {ETF_CORPUS}
 
-**IMPORTANT:** Start immediately with your opening when you receive any message. Follow this flow:
-1. Open with brief intro and ask for permission ("Do you have a few minutes to discuss?")
-2. WAIT for their response - if they say YES, then proceed to discovery questions
+**CRITICAL START PROTOCOL:**
+1. FIRST MESSAGE: Copy this EXACTLY: "Hi Nat this is Sarah from American Funds. I'm calling because we noticed you've been looking at ETF products on our webpage, and many advisors like yourself are looking for better ETF solutions. Do you have a few minutes to discuss what you're seeing with your clients right now?"
+2. WAIT for their response - if they say YES, then proceed to discovery questions  
 3. Ask discovery questions ONE AT A TIME and listen to each response
 4. Only suggest a meeting AFTER you've learned about their needs and confirmed genuine interest
 5. Always get permission before moving forward
+
+REMEMBER: You are Sarah calling Nat. NEVER say "Hi there" or "Alex".
     """
     headers = { "Authorization": f"Bearer {OPENAI_API_KEY}", "OpenAI-Beta": "realtime=v1" }
 
@@ -1018,6 +1241,8 @@ After questions, **pause**. Let silence work.
                 }
             }
             log.info(f"[{sid}] Sending config to OpenAI...")
+            log.info(f"[{sid}] FULL INSTRUCTIONS BEING SENT:")
+            log.info(f"[{sid}] {session_instructions}")  # Log COMPLETE instructions
             await openai_ws.send(json.dumps(config_event))
             log.info(f"[{sid}] Config sent.")
             
@@ -1028,7 +1253,7 @@ After questions, **pause**. Let silence work.
                 "item": {
                     "type": "message",
                     "role": "user",
-                    "content": [{"type": "input_text", "text": "start"}]
+                    "content": [{"type": "input_text", "text": "You are Sarah from American Funds. The person you are calling is named Nat. You must start with these EXACT WORDS without any changes: 'Hi Nat this is Sarah from American Funds. I'm calling because we noticed you've been looking at ETF products on our webpage, and many advisors like yourself are looking for better ETF solutions. Do you have a few minutes to discuss what you're seeing with your clients right now?' Do not say Hi there, do not say Alex, do not change any words. Start now."}]
                 }
             }
             await openai_ws.send(json.dumps(initial_message))
@@ -1077,6 +1302,48 @@ After questions, **pause**. Let silence work.
                                     current_assistant_response += text # Accumulate assistant text
                                     log.info(f"[{sid}] response.text.delta: Total accumulated so far: '{current_assistant_response}'")
                                     # <<< END LOGGING >>>
+                                    
+                                    # *** IMMEDIATE EMAIL TRIGGER - Check for meeting confirmation as assistant speaks ***
+                                    confirmation_triggers = ["perfect", "great", "we're set", "confirmed", "scheduled for"]
+                                    meeting_days = ["monday", "tuesday", "wednesday", "thursday", "friday"]
+                                    
+                                    log.info(f"[{sid}] 🔍 CHECKING TRIGGERS: current_response='{current_assistant_response.lower()}'")
+                                    trigger_found = any(trigger in current_assistant_response.lower() for trigger in confirmation_triggers)
+                                    day_found = any(day in current_assistant_response.lower() for day in meeting_days)
+                                    log.info(f"[{sid}] 🔍 TRIGGER CHECK: trigger_found={trigger_found}, day_found={day_found}")
+                                    
+                                    if trigger_found:
+                                        if day_found:
+                                            # Check if email already sent for this session
+                                            if not clients.get(sid, {}).get('email_sent', False):
+                                                log.info(f"[{sid}] IMMEDIATE TRIGGER: Meeting confirmed - sending email NOW!")
+                                                clients[sid]['email_sent'] = True  # Prevent duplicate emails
+                                                
+                                                # Parse meeting details and send email immediately
+                                                meeting_info = parse_meeting_details(current_assistant_response)
+                                                log.info(f"[{sid}] 🟢 Immediate email - parsed meeting info: {meeting_info}")
+                                                log.info(f"[{sid}] 🟢 Conversation text being parsed: {current_assistant_response}")
+                                                
+                                                # Send email and create Salesforce event in background thread for fastest response
+                                                def send_immediate_confirmation():
+                                                    try:
+                                                        results = send_meeting_confirmation(meeting_info, current_assistant_response)
+                                                        if results['email_sent']:
+                                                            log.info(f"[{sid}] IMMEDIATE EMAIL SENT SUCCESSFULLY!")
+                                                        else:
+                                                            log.error(f"[{sid}] Failed to send immediate email")
+                                                        if results['salesforce_created']:
+                                                            log.info(f"[{sid}] SALESFORCE EVENT CREATED SUCCESSFULLY!")
+                                                        else:
+                                                            log.warning(f"[{sid}] Salesforce event not created")
+                                                    except Exception as e:
+                                                        log.error(f"[{sid}] Error sending immediate confirmation: {e}")
+                                                
+                                                import threading
+                                                # Use daemon=False to ensure thread completes even if main session ends
+                                                confirmation_thread = threading.Thread(target=send_immediate_confirmation, daemon=False)
+                                                confirmation_thread.start()
+                                    
                                     safe_emit('response_text_update', {'text': text, 'is_final': False}, room=sid)
                                 else:
                                     log.info(f"[{sid}] response.text.delta: Empty text received")
@@ -1124,36 +1391,58 @@ After questions, **pause**. Let silence work.
                                 if turn_user_transcript and any(keyword in turn_user_transcript.lower() for keyword in follow_up_keywords):
                                     log.info(f"[{sid}] User expressed interest in follow-up")
                                 
-                                # Check if meeting was confirmed and send calendar invite
-                                meeting_confirmed_keywords = ["perfect", "great", "sounds good", "confirmed", "set for", "scheduled", "tuesday", "wednesday", "thursday", "friday", "monday"]
-                                assistant_confirmed_meeting = any(keyword in current_assistant_response.lower() for keyword in ["perfect", "great", "we're set", "confirmed", "scheduled"])
+                                # Check if meeting was confirmed by user OR assistant and send email immediately
+                                user_confirmed_keywords = ["yes", "sure", "sounds good", "perfect", "great", "okay", "ok", "works", "fine", "good"]
+                                assistant_confirmed_keywords = ["perfect", "great", "we're set", "confirmed", "scheduled"]
                                 
-                                if assistant_confirmed_meeting and any(day in current_assistant_response.lower() for day in ["monday", "tuesday", "wednesday", "thursday", "friday"]):
+                                log.info(f"[{sid}] 🔍 SECONDARY TRIGGER CHECK:")
+                                log.info(f"[{sid}] 🔍 User transcript: '{turn_user_transcript}'")
+                                log.info(f"[{sid}] 🔍 Assistant response: '{current_assistant_response}'")
+                                
+                                user_confirmed_meeting = turn_user_transcript and any(keyword in turn_user_transcript.lower() for keyword in user_confirmed_keywords)
+                                assistant_confirmed_meeting = any(keyword in current_assistant_response.lower() for keyword in assistant_confirmed_keywords)
+                                meeting_has_day = any(day in (current_assistant_response + " " + (turn_user_transcript or "")).lower() for day in ["monday", "tuesday", "wednesday", "thursday", "friday"])
+                                
+                                log.info(f"[{sid}] 🔍 SECONDARY CHECK: user_confirmed={user_confirmed_meeting}, assistant_confirmed={assistant_confirmed_meeting}, has_day={meeting_has_day}")
+                                
+                                if (user_confirmed_meeting or assistant_confirmed_meeting) and meeting_has_day:
                                     log.info(f"[{sid}] Meeting appears to be confirmed - parsing details and sending calendar invite")
                                     
-                                    # Parse meeting details from the conversation
-                                    full_conversation = current_assistant_response + " " + (turn_user_transcript or "")
-                                    meeting_info = parse_meeting_details(full_conversation)
-                                    
-                                    log.info(f"[{sid}] Parsed meeting info: {meeting_info}")
-                                    
-                                    # Send follow-up email immediately
-                                    def send_email_async():
-                                        try:
-                                            # Send plain follow-up email
-                                            email_success = send_plain_email(meeting_info, full_conversation)
-                                            if email_success:
-                                                log.info(f"[{sid}] Follow-up email sent successfully")
-                                            else:
-                                                log.error(f"[{sid}] Failed to send follow-up email")
-                                                
-                                        except Exception as e:
-                                            log.error(f"[{sid}] Error sending email: {e}")
-                                    
-                                    # Send email in background thread for faster response
-                                    import threading
-                                    email_thread = threading.Thread(target=send_email_async, daemon=True)
-                                    email_thread.start()
+                                    # Check if email already sent for this session to prevent duplicates
+                                    if not clients.get(sid, {}).get('email_sent', False):
+                                        log.info(f"[{sid}] No email sent yet - proceeding with confirmation")
+                                        clients[sid]['email_sent'] = True  # Prevent duplicate emails
+                                        
+                                        # Parse meeting details from the conversation
+                                        full_conversation = current_assistant_response + " " + (turn_user_transcript or "")
+                                        meeting_info = parse_meeting_details(full_conversation)
+                                        
+                                        log.info(f"[{sid}] Parsed meeting info: {meeting_info}")
+                                        
+                                        # Send follow-up email and create Salesforce event immediately
+                                        def send_confirmation_async():
+                                            try:
+                                                # Send email and create Salesforce event
+                                                results = send_meeting_confirmation(meeting_info, full_conversation)
+                                                if results['email_sent']:
+                                                    log.info(f"[{sid}] Follow-up email sent successfully")
+                                                else:
+                                                    log.error(f"[{sid}] Failed to send follow-up email")
+                                                if results['salesforce_created']:
+                                                    log.info(f"[{sid}] Salesforce event created successfully")
+                                                else:
+                                                    log.warning(f"[{sid}] Salesforce event not created")
+                                                    
+                                            except Exception as e:
+                                                log.error(f"[{sid}] Error sending confirmation: {e}")
+                                        
+                                        # Send email and create Salesforce event in background thread for faster response
+                                        import threading
+                                        # Use daemon=False to ensure thread completes even if main session ends
+                                        confirmation_thread = threading.Thread(target=send_confirmation_async, daemon=False)
+                                        confirmation_thread.start()
+                                    else:
+                                        log.info(f"[{sid}] Email already sent for this session - skipping duplicate")
                                 
                                 # Signal end of ASSISTANT text stream for this turn
                                 safe_emit('response_text_update', {'text': '', 'is_final': True}, room=sid)
@@ -1217,6 +1506,44 @@ After questions, **pause**. Let silence work.
 @app.route('/')
 def index(): 
     return render_template('index.html')
+
+@app.route('/test-salesforce')
+def test_salesforce():
+    """Test endpoint to manually trigger Salesforce integration"""
+    from datetime import datetime, timedelta
+    
+    # Create test meeting info
+    tomorrow = datetime.now() + timedelta(days=1)
+    meeting_info = {
+        'date': tomorrow,
+        'time': '14:00',
+        'advisor_name': 'Test User',
+        'day': 'Tomorrow'
+    }
+    
+    conversation_text = "Perfect! Let's schedule our meeting for tomorrow at 2 PM to discuss American Funds ETF solutions."
+    
+    log.info("🔥 TEST ENDPOINT: Manually triggering Salesforce integration")
+    
+    try:
+        # Test the full workflow
+        results = send_meeting_confirmation(meeting_info, conversation_text)
+        
+        response_html = f"""
+        <h1>Salesforce Integration Test Results</h1>
+        <p><strong>Email Sent:</strong> {'✅ Success' if results['email_sent'] else '❌ Failed'}</p>
+        <p><strong>Salesforce Event Created:</strong> {'✅ Success' if results['salesforce_created'] else '❌ Failed'}</p>
+        <p><strong>Meeting Info:</strong> {meeting_info}</p>
+        <p><strong>Results:</strong> {results}</p>
+        <hr>
+        <p>Check the application logs for detailed information.</p>
+        <p><a href="/">Back to Main App</a></p>
+        """
+        
+        return response_html
+    except Exception as e:
+        log.error(f"Test endpoint error: {e}")
+        return f"<h1>Test Failed</h1><p>Error: {e}</p><p><a href='/'>Back to Main App</a></p>"
 
 @app.route('/api/advisor-data')
 def get_advisor_data():

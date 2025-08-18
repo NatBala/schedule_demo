@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElevenLabs Official SDK Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 16px;
+        }
+        #status {
+            margin: 20px 0;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 5px;
+        }
+        #conversation {
+            margin: 20px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 5px;
+        }
+        .agent { background: #e3f2fd; }
+        .user { background: #f3e5f5; text-align: right; }
+        .error { background: #ffebee; color: #c62828; }
+    </style>
+</head>
+<body>
+    <h1>ElevenLabs Official SDK Test</h1>
+    
+    <div id="status">Ready</div>
+    
+    <div>
+        <button onclick="startCall()">Start Call</button>
+        <button onclick="endCall()">End Call</button>
+    </div>
+    
+    <div id="conversation"></div>
+    
+    <script type="module">
+        import { ElevenLabsClient } from "https://cdn.jsdelivr.net/npm/elevenlabs@latest/+esm";
+        
+        let conversation = null;
+        
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+            console.log('Status:', message);
+        }
+        
+        function addMessage(text, type = 'agent') {
+            const conv = document.getElementById('conversation');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = text;
+            conv.appendChild(msg);
+            conv.scrollTop = conv.scrollHeight;
+        }
+        
+        window.startCall = async function() {
+            try {
+                updateStatus('Fetching token from server...');
+                
+                // Get token from your server
+                const tokenResponse = await fetch('http://localhost:5052/token');
+                if (!tokenResponse.ok) {
+                    throw new Error(`Server returned ${tokenResponse.status}`);
+                }
+                
+                const { token } = await tokenResponse.json();
+                updateStatus('Got token, initializing client...');
+                
+                // Initialize ElevenLabs client
+                const client = new ElevenLabsClient({
+                    apiKey: token // Use token as API key
+                });
+                
+                updateStatus('Starting conversation...');
+                
+                // Start conversation
+                const conversationId = await client.conversationalAI.createConversation({
+                    agent_id: "agent_2001k2vep3eafpxb6qk5q8f03jt8"
+                });
+                
+                updateStatus('Conversation started!');
+                addMessage('Conversation started', 'error');
+                
+                // Note: The actual WebRTC connection would need additional setup
+                // This is just testing the basic SDK initialization
+                
+            } catch (error) {
+                updateStatus(`Error: ${error.message}`);
+                addMessage(`Error: ${error.message}`, 'error');
+                console.error('Full error:', error);
+            }
+        }
+        
+        window.endCall = function() {
+            if (conversation) {
+                // End conversation
+                updateStatus('Call ended');
+            }
+        }
+    </script>
+</body>
+</html>

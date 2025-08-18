@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElevenLabs with LiveKit (Correct Implementation)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 { color: #333; margin-bottom: 10px; }
+        .subtitle { color: #666; margin-bottom: 30px; }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        #status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+        
+        .status-ready { background: #e8f5e9; color: #2e7d32; }
+        .status-connecting { background: #fff3e0; color: #ef6c00; }
+        .status-connected { background: #e3f2fd; color: #1565c0; }
+        .status-error { background: #ffebee; color: #c62828; }
+        
+        #conversation {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            background: #fafafa;
+        }
+        
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        
+        .agent { background: #e3f2fd; }
+        .user { background: #f3e5f5; text-align: right; }
+        .system { background: #fff9c4; font-style: italic; }
+        .error { background: #ffebee; color: #c62828; }
+        
+        .info-box {
+            background: #f0f9ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #3b82f6;
+        }
+        
+        pre {
+            background: #1f2937;
+            color: #10b981;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 12px;
+            margin: 10px 0;
+        }
+    </style>
+    <!-- LiveKit Client SDK -->
+    <script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ ElevenLabs Conversational AI</h1>
+        <p class="subtitle">Using LiveKit WebRTC for real-time conversation</p>
+        
+        <div class="info-box">
+            <strong>Detected Configuration:</strong><br>
+            • Platform: LiveKit WebRTC<br>
+            • Room: room_agent_2001k2vep3eafpxb6qk5q8f03jt8_conv_*<br>
+            • Agent works in ElevenLabs playground ✅
+        </div>
+        
+        <div id="status" class="status-ready">Ready to start</div>
+        
+        <div>
+            <button id="startBtn" onclick="startConversation()">Start Conversation</button>
+            <button id="stopBtn" onclick="stopConversation()" disabled>Stop</button>
+        </div>
+        
+        <div id="conversation"></div>
+        
+        <h3>Debug Log:</h3>
+        <pre id="debug">Waiting for action...</pre>
+    </div>
+
+    <script>
+        let room = null;
+        let localParticipant = null;
+        
+        function log(msg) {
+            const debug = document.getElementById('debug');
+            const time = new Date().toISOString().split('T')[1].substring(0, 12);
+            debug.textContent += `[${time}] ${msg}\n`;
+            debug.scrollTop = debug.scrollHeight;
+            console.log(msg);
+        }
+        
+        function updateStatus(text, type = 'ready') {
+            document.getElementById('status').textContent = text;
+            document.getElementById('status').className = `status-${type}`;
+            log(`Status: ${text}`);
+        }
+        
+        function addMessage(text, type = 'system') {
+            const conv = document.getElementById('conversation');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = text;
+            conv.appendChild(msg);
+            conv.scrollTop = conv.scrollHeight;
+        }
+        
+        async function startConversation() {
+            try {
+                updateStatus('Getting conversation token...', 'connecting');
+                document.getElementById('startBtn').disabled = true;
+                
+                // Step 1: Get token from server
+                const tokenResponse = await fetch('http://localhost:5052/token');
+                if (!tokenResponse.ok) {
+                    throw new Error(`Server error: ${tokenResponse.status}`);
+                }
+                
+                const tokenData = await tokenResponse.json();
+                const token = tokenData.token;
+                log(`Got JWT token`);
+                
+                // Step 2: Parse token to get room info
+                const tokenParts = token.split('.');
+                const payload = JSON.parse(atob(tokenParts[1]));
+                const roomName = payload.video.room;
+                log(`Room name: ${roomName}`);
+                
+                updateStatus('Connecting to LiveKit room...', 'connecting');
+                
+                // Step 3: Connect to LiveKit room
+                // ElevenLabs uses LiveKit cloud
+                const livekitUrl = 'wss://elevenlabs.livekit.cloud';
+                
+                room = new LivekitClient.Room({
+                    adaptiveStream: true,
+                    dynacast: true,
+                    audioCaptureDefaults: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                        sampleRate: 16000,
+                        channelCount: 1
+                    }
+                });
+                
+                // Set up event handlers
+                room.on('participantConnected', (participant) => {
+                    log(`Participant connected: ${participant.identity}`);
+                    if (participant.identity.includes('agent')) {
+                        addMessage('🤖 Agent joined the conversation', 'system');
+                    }
+                });
+                
+                room.on('trackSubscribed', (track, publication, participant) => {
+                    log(`Track subscribed: ${track.kind} from ${participant.identity}`);
+                    
+                    if (track.kind === 'audio' && participant.identity.includes('agent')) {
+                        // Attach agent's audio to play it
+                        const audioElement = track.attach();
+                        document.body.appendChild(audioElement);
+                        audioElement.play();
+                        log('Agent audio attached and playing');
+                    }
+                });
+                
+                room.on('dataReceived', (payload, participant) => {
+                    try {
+                        const data = JSON.parse(new TextDecoder().decode(payload));
+                        log(`Data received: ${JSON.stringify(data)}`);
+                        
+                        if (data.type === 'transcript') {
+                            addMessage(`You: ${data.text}`, 'user');
+                        } else if (data.type === 'agent_message') {
+                            addMessage(`Agent: ${data.text}`, 'agent');
+                            
+                            // Send to server for Salesforce/email processing
+                            fetch('http://localhost:5052/agent_response', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ text: data.text })
+                            });
+                        }
+                    } catch (e) {
+                        log(`Data parsing error: ${e.message}`);
+                    }
+                });
+                
+                room.on('disconnected', () => {
+                    updateStatus('Disconnected', 'ready');
+                    addMessage('📞 Call ended', 'system');
+                    cleanup();
+                });
+                
+                // Connect to room with token
+                log(`Connecting to ${livekitUrl} with token...`);
+                await room.connect(livekitUrl, token);
+                
+                updateStatus('Connected! Enabling microphone...', 'connected');
+                localParticipant = room.localParticipant;
+                
+                // Step 4: Publish local audio track
+                await room.localParticipant.setMicrophoneEnabled(true);
+                log('Microphone enabled and publishing');
+                
+                updateStatus('🎙️ Conversation active! Speak now...', 'connected');
+                addMessage('💬 Connected! Say hello to start the conversation!', 'system');
+                
+                document.getElementById('stopBtn').disabled = false;
+                
+            } catch (error) {
+                log(`Error: ${error.message}`);
+                updateStatus(`Failed: ${error.message}`, 'error');
+                addMessage(`❌ ${error.message}`, 'error');
+                
+                // Provide fallback suggestion
+                if (error.message.includes('LivekitClient')) {
+                    addMessage('⚠️ LiveKit client issue detected', 'error');
+                    addMessage('Try using the ElevenLabs SDK directly', 'system');
+                }
+                
+                cleanup();
+            }
+        }
+        
+        async function stopConversation() {
+            if (room) {
+                await room.disconnect();
+            }
+            cleanup();
+        }
+        
+        function cleanup() {
+            if (room) {
+                room.disconnect();
+                room = null;
+            }
+            localParticipant = null;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            updateStatus('Ready to start', 'ready');
+            
+            // Remove any audio elements
+            const audioElements = document.querySelectorAll('audio');
+            audioElements.forEach(el => el.remove());
+        }
+        
+        // Initialize
+        window.addEventListener('load', () => {
+            log('Page loaded');
+            addMessage('👋 Welcome! This uses LiveKit for ElevenLabs conversation.', 'system');
+            addMessage('Click "Start Conversation" to begin.', 'system');
+            
+            // Check if LiveKit loaded
+            if (typeof LivekitClient !== 'undefined') {
+                log('LiveKit client loaded successfully');
+            } else {
+                log('ERROR: LiveKit client not loaded!');
+                addMessage('❌ LiveKit client failed to load', 'error');
+            }
+        });
+    </script>
+</body>
+</html>

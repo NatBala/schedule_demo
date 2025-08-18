@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Assistant Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 800px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .main-content {
+            padding: 40px;
+        }
+
+        .status-panel {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        .status-ready { background: #28a745; }
+        .status-connecting { background: #ffc107; }
+        .status-active { background: #007bff; }
+        .status-error { background: #dc3545; }
+
+        .status-text {
+            font-size: 1.2em;
+            font-weight: 500;
+            vertical-align: middle;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 150px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545 0%, #e74c3c 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3);
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .conversation {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            min-height: 300px;
+            max-height: 500px;
+            overflow-y: auto;
+            margin: 30px 0;
+        }
+
+        .message {
+            margin: 15px 0;
+            padding: 15px 20px;
+            border-radius: 18px;
+            max-width: 80%;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+
+        .message.assistant {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+        }
+
+        .message.system {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+            color: white;
+            text-align: center;
+            margin: 0 auto;
+            font-style: italic;
+            max-width: 60%;
+        }
+
+        .message.error {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            color: white;
+            text-align: center;
+            margin: 0 auto;
+            max-width: 70%;
+        }
+
+        .audio-visualizer {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 60px;
+            margin: 20px 0;
+        }
+
+        .bar {
+            width: 4px;
+            margin: 0 2px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 2px;
+            transition: height 0.1s ease;
+        }
+
+        .debug-panel {
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .debug-panel h4 {
+            color: #ffffff;
+            margin-bottom: 10px;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎙️ Voice Assistant</h1>
+            <p>Real-time conversational AI interface</p>
+        </div>
+
+        <div class="main-content">
+            <div class="status-panel">
+                <span class="status-indicator status-ready" id="statusIndicator"></span>
+                <span class="status-text" id="statusText">Ready to connect</span>
+            </div>
+
+            <div class="controls">
+                <button class="btn btn-primary" id="startBtn" onclick="startConversation()">
+                    🎤 Start Conversation
+                </button>
+                <button class="btn btn-danger" id="stopBtn" onclick="stopConversation()" disabled>
+                    ⏹️ Stop
+                </button>
+            </div>
+
+            <div class="audio-visualizer" id="visualizer">
+                <!-- Audio bars will be generated here -->
+            </div>
+
+            <div class="conversation" id="conversation">
+                <div class="message system">
+                    Welcome! Click "Start Conversation" to begin talking with your AI assistant.
+                </div>
+            </div>
+
+            <div class="debug-panel">
+                <h4>Debug Log</h4>
+                <div id="debugLog">System initialized...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class VoiceAssistant {
+            constructor() {
+                this.websocket = null;
+                this.mediaStream = null;
+                this.audioContext = null;
+                this.processor = null;
+                this.isConnected = false;
+                this.isRecording = false;
+                
+                this.initializeVisualizer();
+            }
+
+            initializeVisualizer() {
+                const visualizer = document.getElementById('visualizer');
+                for (let i = 0; i < 20; i++) {
+                    const bar = document.createElement('div');
+                    bar.className = 'bar';
+                    bar.style.height = '10px';
+                    visualizer.appendChild(bar);
+                }
+            }
+
+            updateStatus(text, type = 'ready') {
+                const indicator = document.getElementById('statusIndicator');
+                const statusText = document.getElementById('statusText');
+                
+                indicator.className = `status-indicator status-${type}`;
+                statusText.textContent = text;
+                
+                this.log(`Status: ${text} (${type})`);
+            }
+
+            log(message) {
+                const debugLog = document.getElementById('debugLog');
+                const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+                debugLog.innerHTML += `<br>[${timestamp}] ${message}`;
+                debugLog.scrollTop = debugLog.scrollHeight;
+                console.log(`[VoiceAssistant] ${message}`);
+            }
+
+            addMessage(text, type = 'system') {
+                const conversation = document.getElementById('conversation');
+                const message = document.createElement('div');
+                message.className = `message ${type}`;
+                message.textContent = text;
+                conversation.appendChild(message);
+                conversation.scrollTop = conversation.scrollHeight;
+            }
+
+            async startConversation() {
+                try {
+                    this.updateStatus('Requesting microphone access...', 'connecting');
+                    document.getElementById('startBtn').disabled = true;
+
+                    // Get microphone access
+                    this.mediaStream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            sampleRate: 16000,
+                            channelCount: 1,
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        }
+                    });
+
+                    this.log('Microphone access granted');
+                    this.updateStatus('Getting conversation token...', 'connecting');
+
+                    // Get token from server
+                    const tokenResponse = await fetch('http://localhost:5052/token');
+                    if (!tokenResponse.ok) {
+                        throw new Error(`Server error: ${tokenResponse.status}`);
+                    }
+
+                    const { token } = await tokenResponse.json();
+                    this.log(`Token received: ${token.substring(0, 30)}...`);
+
+                    this.updateStatus('Connecting to voice service...', 'connecting');
+
+                    // Create WebSocket connection
+                    await this.connectWebSocket(token);
+
+                } catch (error) {
+                    this.log(`Error: ${error.message}`);
+                    this.updateStatus('Connection failed', 'error');
+                    this.addMessage(`❌ ${error.message}`, 'error');
+                    this.cleanup();
+                }
+            }
+
+            async connectWebSocket(token) {
+                return new Promise((resolve, reject) => {
+                    // Parse token to get connection details
+                    const parts = token.split('.');
+                    const payload = JSON.parse(atob(parts[1]));
+                    const roomName = payload.video.room;
+                    
+                    this.log(`Connecting to room: ${roomName}`);
+
+                    // Try multiple connection approaches
+                    const endpoints = [
+                        `wss://api.elevenlabs.io/v1/convai/conversation?token=${token}`,
+                        `wss://api.elevenlabs.io/v1/convai/conversation`,
+                        `wss://elevenlabs.livekit.cloud/?token=${token}`
+                    ];
+
+                    this.tryWebSocketConnection(endpoints, token, 0, resolve, reject);
+                });
+            }
+
+            tryWebSocketConnection(endpoints, token, index, resolve, reject) {
+                if (index >= endpoints.length) {
+                    reject(new Error('All WebSocket endpoints failed'));
+                    return;
+                }
+
+                const endpoint = endpoints[index];
+                this.log(`Trying endpoint ${index + 1}/${endpoints.length}: ${endpoint.substring(0, 50)}...`);
+
+                this.websocket = new WebSocket(endpoint);
+                
+                const connectionTimeout = setTimeout(() => {
+                    if (this.websocket.readyState === WebSocket.CONNECTING) {
+                        this.log(`Endpoint ${index + 1} timeout, trying next...`);
+                        this.websocket.close();
+                        this.tryWebSocketConnection(endpoints, token, index + 1, resolve, reject);
+                    }
+                }, 5000);
+
+                this.websocket.onopen = () => {
+                    clearTimeout(connectionTimeout);
+                    this.log(`WebSocket connected via endpoint ${index + 1}`);
+                    this.isConnected = true;
+                    
+                    // Send authentication if needed
+                    if (index === 1) { // For endpoint without token in URL
+                        this.websocket.send(JSON.stringify({
+                            type: 'authentication',
+                            token: token
+                        }));
+                    }
+
+                    this.setupAudioStreaming();
+                    this.updateStatus('🎙️ Conversation active - Speak now!', 'active');
+                    this.addMessage('Connected! You can start speaking now.', 'system');
+                    
+                    document.getElementById('stopBtn').disabled = false;
+                    resolve();
+                };
+
+                this.websocket.onmessage = (event) => {
+                    this.handleWebSocketMessage(event);
+                };
+
+                this.websocket.onerror = (error) => {
+                    clearTimeout(connectionTimeout);
+                    this.log(`Endpoint ${index + 1} error: ${error.type || 'Unknown'}`);
+                    
+                    // Try next endpoint
+                    setTimeout(() => {
+                        this.tryWebSocketConnection(endpoints, token, index + 1, resolve, reject);
+                    }, 100);
+                };
+
+                this.websocket.onclose = (event) => {
+                    clearTimeout(connectionTimeout);
+                    this.log(`Endpoint ${index + 1} closed: ${event.code} - ${event.reason || 'No reason'}`);
+                    
+                    if (this.isConnected) {
+                        // Connection was successful but now closed
+                        this.isConnected = false;
+                        this.updateStatus('Disconnected', 'ready');
+                        this.addMessage('Connection closed', 'system');
+                        this.cleanup();
+                    } else {
+                        // Connection failed, try next endpoint
+                        setTimeout(() => {
+                            this.tryWebSocketConnection(endpoints, token, index + 1, resolve, reject);
+                        }, 100);
+                    }
+                };
+            }
+
+            setupAudioStreaming() {
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                        sampleRate: 16000
+                    });
+
+                    const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+                    this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
+
+                    // Create analyzer for visualization
+                    const analyzer = this.audioContext.createAnalyser();
+                    analyzer.fftSize = 256;
+                    source.connect(analyzer);
+                    analyzer.connect(this.processor);
+
+                    this.processor.onaudioprocess = (e) => {
+                        if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                            const inputData = e.inputBuffer.getChannelData(0);
+                            const pcmData = this.convertFloat32ToInt16(inputData);
+                            this.websocket.send(pcmData.buffer);
+                            
+                            // Update visualizer
+                            this.updateVisualizer(analyzer);
+                        }
+                    };
+
+                    this.processor.connect(this.audioContext.destination);
+                    this.isRecording = true;
+                    this.log('Audio streaming initialized');
+
+                } catch (error) {
+                    this.log(`Audio setup error: ${error.message}`);
+                    throw error;
+                }
+            }
+
+            updateVisualizer(analyzer) {
+                const bufferLength = analyzer.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+                analyzer.getByteFrequencyData(dataArray);
+
+                const bars = document.querySelectorAll('.bar');
+                const step = Math.floor(bufferLength / bars.length);
+
+                bars.forEach((bar, index) => {
+                    const value = dataArray[index * step];
+                    const height = Math.max(5, (value / 255) * 50);
+                    bar.style.height = `${height}px`;
+                });
+            }
+
+            handleWebSocketMessage(event) {
+                if (event.data instanceof Blob || event.data instanceof ArrayBuffer) {
+                    // Audio response from assistant
+                    this.log(`Received audio: ${event.data.size || event.data.byteLength} bytes`);
+                    this.playAudioResponse(event.data);
+                } else {
+                    // Text/JSON message
+                    try {
+                        const data = JSON.parse(event.data);
+                        this.log(`Received: ${JSON.stringify(data).substring(0, 100)}...`);
+
+                        if (data.type === 'user_transcript' || data.transcript) {
+                            this.addMessage(data.transcript || data.text, 'user');
+                        } else if (data.type === 'agent_response' || data.response) {
+                            const responseText = data.response || data.text;
+                            this.addMessage(responseText, 'assistant');
+                            
+                            // Send to server for processing
+                            this.sendToServer(responseText);
+                        } else if (data.type === 'error') {
+                            this.addMessage(`Error: ${data.message}`, 'error');
+                        }
+                    } catch (e) {
+                        this.log(`Non-JSON message: ${event.data}`);
+                    }
+                }
+            }
+
+            async sendToServer(text) {
+                try {
+                    await fetch('http://localhost:5052/agent_response', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: text })
+                    });
+                    this.log('Response sent to server for processing');
+                } catch (error) {
+                    this.log(`Server communication error: ${error.message}`);
+                }
+            }
+
+            async playAudioResponse(audioData) {
+                try {
+                    let arrayBuffer;
+                    if (audioData instanceof Blob) {
+                        arrayBuffer = await audioData.arrayBuffer();
+                    } else {
+                        arrayBuffer = audioData;
+                    }
+
+                    const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+                    const source = this.audioContext.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(this.audioContext.destination);
+                    source.start();
+
+                    this.log('Playing audio response');
+                } catch (error) {
+                    this.log(`Audio playback error: ${error.message}`);
+                }
+            }
+
+            convertFloat32ToInt16(buffer) {
+                const l = buffer.length;
+                const buf = new Int16Array(l);
+                for (let i = 0; i < l; i++) {
+                    buf[i] = Math.min(1, buffer[i]) * 0x7FFF;
+                }
+                return buf;
+            }
+
+            stopConversation() {
+                this.log('Stopping conversation...');
+                this.cleanup();
+            }
+
+            cleanup() {
+                if (this.processor) {
+                    this.processor.disconnect();
+                    this.processor = null;
+                }
+                if (this.audioContext && this.audioContext.state !== 'closed') {
+                    this.audioContext.close();
+                    this.audioContext = null;
+                }
+                if (this.mediaStream) {
+                    this.mediaStream.getTracks().forEach(track => track.stop());
+                    this.mediaStream = null;
+                }
+                if (this.websocket) {
+                    this.websocket.close();
+                    this.websocket = null;
+                }
+
+                this.isConnected = false;
+                this.isRecording = false;
+
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+                this.updateStatus('Ready to connect', 'ready');
+
+                // Reset visualizer
+                document.querySelectorAll('.bar').forEach(bar => {
+                    bar.style.height = '10px';
+                });
+            }
+        }
+
+        // Global instance
+        const voiceAssistant = new VoiceAssistant();
+
+        // Global functions for buttons
+        function startConversation() {
+            voiceAssistant.startConversation();
+        }
+
+        function stopConversation() {
+            voiceAssistant.stopConversation();
+        }
+
+        // Initialize on load
+        window.addEventListener('load', () => {
+            voiceAssistant.log('Voice Assistant UI loaded and ready');
+        });
+    </script>
+</body>
+</html>

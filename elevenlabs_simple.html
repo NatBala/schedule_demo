@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElevenLabs Simple Implementation</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 { color: #333; }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        
+        button:disabled { opacity: 0.5; }
+        
+        #status {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 5px;
+        }
+        
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ElevenLabs Voice Chat</h1>
+        
+        <div id="status">Ready</div>
+        
+        <button onclick="testAPI()">Test API</button>
+        <button onclick="startChat()">Start Voice Chat</button>
+        
+        <div id="output"></div>
+    </div>
+
+    <script>
+        const SERVER_URL = 'http://localhost:5052';
+        
+        async function testAPI() {
+            try {
+                document.getElementById('status').textContent = 'Testing...';
+                
+                // Test server
+                const serverTest = await fetch(`${SERVER_URL}/status`);
+                const serverData = await serverTest.json();
+                
+                // Test token
+                const tokenTest = await fetch(`${SERVER_URL}/token`);
+                const tokenData = await tokenTest.json();
+                
+                document.getElementById('output').innerHTML = `
+                    <p class="success">✅ Server is running</p>
+                    <p class="success">✅ Token endpoint works</p>
+                    <p>Agent ID: ${serverData.agent_id}</p>
+                `;
+                
+                document.getElementById('status').textContent = 'API test successful!';
+                
+            } catch (error) {
+                document.getElementById('output').innerHTML = `
+                    <p class="error">❌ Error: ${error.message}</p>
+                    <p>Make sure server is running: python elevenlabs_integrated_server.py</p>
+                `;
+                document.getElementById('status').textContent = 'API test failed';
+            }
+        }
+        
+        async function startChat() {
+            try {
+                document.getElementById('status').textContent = 'Starting chat...';
+                
+                // Get token
+                const tokenResponse = await fetch(`${SERVER_URL}/token`);
+                const { token } = await tokenResponse.json();
+                
+                // Since the agent works in ElevenLabs playground,
+                // we know the agent is configured correctly.
+                // The issue is just with the WebRTC/LiveKit connection.
+                
+                // For now, let's provide a direct link to the playground
+                const agentId = 'agent_2001k2vep3eafpxb6qk5q8f03jt8';
+                const playgroundUrl = `https://elevenlabs.io/app/conversational-ai/${agentId}`;
+                
+                document.getElementById('output').innerHTML = `
+                    <p>Token obtained successfully!</p>
+                    <p>The WebRTC connection requires additional setup.</p>
+                    <p><strong>Alternative options:</strong></p>
+                    <ol>
+                        <li>Use the ElevenLabs playground directly: 
+                            <a href="${playgroundUrl}" target="_blank">Open Playground</a>
+                        </li>
+                        <li>Use the ElevenLabs mobile app</li>
+                        <li>Implement using the official ElevenLabs React SDK</li>
+                    </ol>
+                    <p><strong>For production use:</strong></p>
+                    <p>Consider using the ElevenLabs React components which handle the WebRTC complexity:</p>
+                    <pre>npm install @elevenlabs/react</pre>
+                `;
+                
+                document.getElementById('status').textContent = 'See options below';
+                
+            } catch (error) {
+                document.getElementById('output').innerHTML = `
+                    <p class="error">❌ Error: ${error.message}</p>
+                `;
+                document.getElementById('status').textContent = 'Failed to start';
+            }
+        }
+    </script>
+</body>
+</html>

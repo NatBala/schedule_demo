@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElevenLabs WebSocket Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            padding: 12px 24px;
+            margin: 10px;
+            font-size: 16px;
+            background: #6366f1;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #4f46e5;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #status {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f0f9ff;
+            border-left: 4px solid #3b82f6;
+            border-radius: 5px;
+        }
+        #messages {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #e5e7eb;
+            border-radius: 5px;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            background: white;
+        }
+        .message {
+            margin: 8px 0;
+            padding: 8px;
+            border-radius: 5px;
+        }
+        .agent { background: #e0f2fe; }
+        .user { background: #fce7f3; text-align: right; }
+        .system { background: #f3f4f6; font-style: italic; }
+        .error { background: #fee2e2; color: #dc2626; }
+        pre {
+            background: #1f2937;
+            color: #10b981;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔌 ElevenLabs WebSocket Connection Test</h1>
+        <p>This test connects via WebSocket using the conversation token.</p>
+        
+        <div id="status">Ready to start</div>
+        
+        <div>
+            <button id="getTokenBtn" onclick="getToken()">1. Get Token</button>
+            <button id="connectBtn" onclick="connectWebSocket()" disabled>2. Connect WebSocket</button>
+            <button id="sendBtn" onclick="sendMessage()" disabled>3. Send Test Message</button>
+            <button id="disconnectBtn" onclick="disconnect()" disabled>4. Disconnect</button>
+        </div>
+        
+        <div id="messages"></div>
+        
+        <div>
+            <h3>Debug Log:</h3>
+            <pre id="debug">Waiting...</pre>
+        </div>
+    </div>
+
+    <script>
+        let token = null;
+        let ws = null;
+        
+        function log(message) {
+            const debug = document.getElementById('debug');
+            const timestamp = new Date().toISOString().split('T')[1].substring(0, 8);
+            debug.textContent += `[${timestamp}] ${message}\n`;
+            console.log(message);
+        }
+        
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+            log(`Status: ${message}`);
+        }
+        
+        function addMessage(text, type = 'system') {
+            const messages = document.getElementById('messages');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = text;
+            messages.appendChild(msg);
+            messages.scrollTop = messages.scrollHeight;
+        }
+        
+        async function getToken() {
+            try {
+                updateStatus('Fetching token from server...');
+                
+                const response = await fetch('http://localhost:5052/token');
+                log(`Token response status: ${response.status}`);
+                
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}`);
+                }
+                
+                const data = await response.json();
+                token = data.token;
+                
+                updateStatus('Token obtained successfully!');
+                addMessage(`✅ Token: ${token.substring(0, 50)}...`, 'system');
+                log(`Token received: ${token.substring(0, 50)}...`);
+                
+                document.getElementById('getTokenBtn').disabled = true;
+                document.getElementById('connectBtn').disabled = false;
+                
+            } catch (error) {
+                updateStatus(`Error: ${error.message}`);
+                addMessage(`❌ Error: ${error.message}`, 'error');
+                log(`Error getting token: ${error.message}`);
+            }
+        }
+        
+        function connectWebSocket() {
+            if (!token) {
+                alert('Get token first!');
+                return;
+            }
+            
+            try {
+                updateStatus('Connecting to ElevenLabs WebSocket...');
+                
+                // ElevenLabs WebSocket endpoint for conversational AI
+                const wsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?token=${token}`;
+                log(`Connecting to: ${wsUrl.substring(0, 60)}...`);
+                
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = () => {
+                    updateStatus('WebSocket connected!');
+                    addMessage('🔌 Connected to ElevenLabs!', 'system');
+                    log('WebSocket opened');
+                    
+                    document.getElementById('connectBtn').disabled = true;
+                    document.getElementById('sendBtn').disabled = false;
+                    document.getElementById('disconnectBtn').disabled = false;
+                    
+                    // Send initial configuration
+                    const config = {
+                        type: 'conversation_initiation',
+                        conversation_config: {
+                            agent_id: 'agent_2001k2vep3eafpxb6qk5q8f03jt8'
+                        }
+                    };
+                    ws.send(JSON.stringify(config));
+                    log(`Sent config: ${JSON.stringify(config)}`);
+                };
+                
+                ws.onmessage = (event) => {
+                    log(`Received: ${event.data.substring(0, 100)}...`);
+                    
+                    try {
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.type === 'agent_response') {
+                            addMessage(`Agent: ${data.text}`, 'agent');
+                        } else if (data.type === 'user_transcript') {
+                            addMessage(`You: ${data.text}`, 'user');
+                        } else {
+                            addMessage(`System: ${JSON.stringify(data)}`, 'system');
+                        }
+                        
+                    } catch (e) {
+                        // Might be binary audio data
+                        if (event.data instanceof Blob) {
+                            log(`Received audio blob: ${event.data.size} bytes`);
+                        } else {
+                            log(`Received text: ${event.data}`);
+                        }
+                    }
+                };
+                
+                ws.onerror = (error) => {
+                    updateStatus(`WebSocket error: ${error.message || 'Unknown error'}`);
+                    addMessage(`❌ WebSocket error`, 'error');
+                    log(`WebSocket error: ${error}`);
+                };
+                
+                ws.onclose = (event) => {
+                    updateStatus(`WebSocket closed: ${event.reason || 'No reason'}`);
+                    addMessage(`🔌 Disconnected (${event.code})`, 'system');
+                    log(`WebSocket closed: code=${event.code}, reason=${event.reason}`);
+                    resetButtons();
+                };
+                
+            } catch (error) {
+                updateStatus(`Connection error: ${error.message}`);
+                addMessage(`❌ ${error.message}`, 'error');
+                log(`Connection error: ${error}`);
+            }
+        }
+        
+        function sendMessage() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('Not connected!');
+                return;
+            }
+            
+            const testMessage = {
+                type: 'user_audio_config',
+                audio_config: {
+                    sample_rate: 16000,
+                    channels: 1
+                }
+            };
+            
+            ws.send(JSON.stringify(testMessage));
+            log(`Sent: ${JSON.stringify(testMessage)}`);
+            addMessage(`Sent test message`, 'system');
+        }
+        
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            resetButtons();
+        }
+        
+        function resetButtons() {
+            document.getElementById('getTokenBtn').disabled = false;
+            document.getElementById('connectBtn').disabled = true;
+            document.getElementById('sendBtn').disabled = true;
+            document.getElementById('disconnectBtn').disabled = true;
+            token = null;
+        }
+        
+        // Initialize
+        log('Page loaded');
+        addMessage('Ready to test WebSocket connection', 'system');
+    </script>
+</body>
+</html>

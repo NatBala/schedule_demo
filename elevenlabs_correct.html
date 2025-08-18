@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElevenLabs Correct Implementation</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 { color: #333; margin-bottom: 10px; }
+        .subtitle { color: #666; margin-bottom: 30px; }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        #status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+        
+        .status-ready { background: #e8f5e9; color: #2e7d32; }
+        .status-connecting { background: #fff3e0; color: #ef6c00; }
+        .status-connected { background: #e3f2fd; color: #1565c0; }
+        .status-error { background: #ffebee; color: #c62828; }
+        
+        #messages {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            background: #fafafa;
+        }
+        
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        
+        .agent { background: #e3f2fd; }
+        .user { background: #f3e5f5; text-align: right; }
+        .system { background: #fff9c4; font-style: italic; }
+        .error { background: #ffebee; color: #c62828; }
+        
+        pre {
+            background: #1f2937;
+            color: #10b981;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 12px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ ElevenLabs Conversation API - Correct Implementation</h1>
+        <p class="subtitle">Using the signed URL approach with conversation token</p>
+        
+        <div id="status" class="status-ready">Ready to start</div>
+        
+        <div>
+            <button onclick="startCall()">Start Conversation</button>
+            <button onclick="endCall()" id="endBtn" disabled>End Conversation</button>
+        </div>
+        
+        <div id="messages"></div>
+        
+        <h3>Debug Log:</h3>
+        <pre id="debug">Waiting for action...</pre>
+    </div>
+
+    <script>
+        let ws = null;
+        let mediaStream = null;
+        let audioContext = null;
+        
+        function log(msg) {
+            const debug = document.getElementById('debug');
+            const time = new Date().toISOString().split('T')[1].substring(0, 12);
+            debug.textContent += `[${time}] ${msg}\n`;
+            debug.scrollTop = debug.scrollHeight;
+            console.log(msg);
+        }
+        
+        function updateStatus(text, type = 'ready') {
+            document.getElementById('status').textContent = text;
+            document.getElementById('status').className = `status-${type}`;
+            log(`Status: ${text}`);
+        }
+        
+        function addMessage(text, type = 'system') {
+            const messages = document.getElementById('messages');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = text;
+            messages.appendChild(msg);
+            messages.scrollTop = messages.scrollHeight;
+        }
+        
+        async function startCall() {
+            try {
+                updateStatus('Fetching conversation token...', 'connecting');
+                
+                // Step 1: Get signed conversation URL from server
+                const tokenResponse = await fetch('http://localhost:5052/token');
+                if (!tokenResponse.ok) {
+                    throw new Error(`Server error: ${tokenResponse.status}`);
+                }
+                
+                const tokenData = await tokenResponse.json();
+                const token = tokenData.token;
+                log(`Got token: ${token.substring(0, 50)}...`);
+                
+                // Step 2: Get microphone permission
+                updateStatus('Requesting microphone access...', 'connecting');
+                mediaStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        sampleRate: 16000,
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true
+                    }
+                });
+                log('Microphone access granted');
+                
+                // Step 3: Parse the token to get the signed URL
+                // ElevenLabs tokens often contain the full WebSocket URL or are used as auth
+                let wsUrl;
+                
+                // Check if token is a full URL
+                if (token.startsWith('wss://')) {
+                    wsUrl = token;
+                    log('Token is a WebSocket URL');
+                } else {
+                    // Token needs to be appended as query parameter
+                    wsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?token=${token}`;
+                    log('Using token as query parameter');
+                }
+                
+                updateStatus('Connecting to ElevenLabs...', 'connecting');
+                log(`Connecting to: ${wsUrl.substring(0, 80)}...`);
+                
+                // Step 4: Create WebSocket connection
+                ws = new WebSocket(wsUrl);
+                ws.binaryType = 'arraybuffer';
+                
+                ws.onopen = () => {
+                    updateStatus('Connected! Initializing audio...', 'connected');
+                    log('WebSocket connected');
+                    addMessage('🎤 Connected to ElevenLabs!', 'system');
+                    
+                    // Initialize audio streaming
+                    setupAudioStreaming();
+                    
+                    // Send initial configuration
+                    const initMessage = {
+                        type: 'init',
+                        config: {
+                            sampleRate: 16000,
+                            format: 'pcm16'
+                        }
+                    };
+                    ws.send(JSON.stringify(initMessage));
+                    log(`Sent init: ${JSON.stringify(initMessage)}`);
+                    
+                    updateStatus('🎙️ Conversation active! Speak now...', 'connected');
+                    addMessage('Say hello to start the conversation!', 'system');
+                    
+                    document.getElementById('endBtn').disabled = false;
+                };
+                
+                ws.onmessage = (event) => {
+                    if (event.data instanceof ArrayBuffer) {
+                        // Audio data from agent
+                        log(`Received audio: ${event.data.byteLength} bytes`);
+                        playAudio(event.data);
+                    } else {
+                        // Text/JSON message
+                        try {
+                            const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                            log(`Received message: ${JSON.stringify(data).substring(0, 100)}...`);
+                            
+                            if (data.type === 'transcript' || data.transcript) {
+                                addMessage(`You: ${data.transcript || data.text}`, 'user');
+                            } else if (data.type === 'response' || data.response) {
+                                addMessage(`Agent: ${data.response || data.text}`, 'agent');
+                            } else if (data.type === 'error') {
+                                addMessage(`Error: ${data.message}`, 'error');
+                            } else {
+                                log(`Unknown message type: ${JSON.stringify(data)}`);
+                            }
+                        } catch (e) {
+                            log(`Text message: ${event.data}`);
+                        }
+                    }
+                };
+                
+                ws.onerror = (error) => {
+                    log(`WebSocket error: ${error.type || 'Unknown'}`);
+                    updateStatus('Connection error', 'error');
+                    addMessage('❌ Connection error occurred', 'error');
+                };
+                
+                ws.onclose = (event) => {
+                    log(`WebSocket closed: code=${event.code}, reason=${event.reason || 'None'}`);
+                    updateStatus('Disconnected', 'ready');
+                    addMessage(`📞 Call ended (${event.code})`, 'system');
+                    cleanup();
+                };
+                
+            } catch (error) {
+                log(`Error: ${error.message}`);
+                updateStatus(`Failed: ${error.message}`, 'error');
+                addMessage(`❌ ${error.message}`, 'error');
+                cleanup();
+            }
+        }
+        
+        function setupAudioStreaming() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 16000
+                });
+                
+                const source = audioContext.createMediaStreamSource(mediaStream);
+                const processor = audioContext.createScriptProcessor(2048, 1, 1);
+                
+                processor.onaudioprocess = (e) => {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        const inputData = e.inputBuffer.getChannelData(0);
+                        const pcm16 = convertFloat32ToPCM16(inputData);
+                        ws.send(pcm16.buffer);
+                    }
+                };
+                
+                source.connect(processor);
+                processor.connect(audioContext.destination);
+                
+                log('Audio streaming initialized');
+                
+            } catch (error) {
+                log(`Audio setup error: ${error.message}`);
+            }
+        }
+        
+        function convertFloat32ToPCM16(float32Array) {
+            const pcm16 = new Int16Array(float32Array.length);
+            for (let i = 0; i < float32Array.length; i++) {
+                const s = Math.max(-1, Math.min(1, float32Array[i]));
+                pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            return pcm16;
+        }
+        
+        async function playAudio(arrayBuffer) {
+            try {
+                // Convert PCM16 to Float32 for Web Audio API
+                const pcm16 = new Int16Array(arrayBuffer);
+                const float32 = new Float32Array(pcm16.length);
+                
+                for (let i = 0; i < pcm16.length; i++) {
+                    float32[i] = pcm16[i] / (pcm16[i] < 0 ? 0x8000 : 0x7FFF);
+                }
+                
+                const audioBuffer = audioContext.createBuffer(1, float32.length, 16000);
+                audioBuffer.getChannelData(0).set(float32);
+                
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                source.start();
+                
+            } catch (error) {
+                log(`Audio playback error: ${error.message}`);
+            }
+        }
+        
+        function endCall() {
+            if (ws) {
+                ws.close();
+            }
+            cleanup();
+        }
+        
+        function cleanup() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            document.getElementById('endBtn').disabled = true;
+        }
+        
+        // Initialize
+        log('Page loaded and ready');
+        addMessage('Click "Start Conversation" to begin', 'system');
+    </script>
+</body>
+</html>

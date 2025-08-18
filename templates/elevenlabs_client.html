@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElevenLabs Voice Assistant - Fixed Implementation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+        
+        .container {
+            text-align: center;
+            max-width: 600px;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        .title {
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.8;
+            margin-bottom: 30px;
+        }
+        
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            align-items: center;
+        }
+        
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 200px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: linear-gradient(135deg, #ff5252 0%, #ff1744 100%);
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            font-size: 1rem;
+        }
+        
+        .status.connecting {
+            background: rgba(255, 193, 7, 0.2);
+            color: #fff3cd;
+        }
+        
+        .status.connected {
+            background: rgba(40, 167, 69, 0.2);
+            color: #d4edda;
+        }
+        
+        .status.error {
+            background: rgba(220, 53, 69, 0.2);
+            color: #f8d7da;
+        }
+        
+        .conversation {
+            margin-top: 30px;
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            text-align: left;
+        }
+        
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        
+        .user-message {
+            background: rgba(102, 126, 234, 0.3);
+            text-align: right;
+        }
+        
+        .agent-message {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .elevenlabs-badge {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            box-shadow: 0 4px 15px rgba(240, 147, 251, 0.3);
+        }
+        
+        .debug-info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            font-size: 12px;
+            opacity: 0.7;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div class="elevenlabs-badge">ElevenLabs Fixed</div>
+    
+    <div class="container">
+        <h1 class="title">Voice Assistant</h1>
+        <p class="subtitle">ElevenLabs Conversational AI - Fixed Implementation</p>
+        
+        <div class="controls">
+            <button id="startBtn" class="btn btn-primary">Start Conversation</button>
+            <button id="stopBtn" class="btn btn-danger" style="display: none;">Stop</button>
+        </div>
+        
+        <div id="status" class="status">Ready to start</div>
+        
+        <div id="conversation" class="conversation" style="display: none;"></div>
+    </div>
+    
+    <div class="debug-info">
+        <div>Status: <span id="debug-status">Initializing</span></div>
+        <div>Token: <span id="debug-token">Not loaded</span></div>
+        <div>Agent ID: <span id="debug-agent">Loading...</span></div>
+    </div>
+
+    <!-- ElevenLabs Client SDK -->
+    <script type="module">
+        import { Conversation } from 'https://cdn.jsdelivr.net/npm/@elevenlabs/client/+esm';
+        
+        // UI Elements
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusDiv = document.getElementById('status');
+        const conversationDiv = document.getElementById('conversation');
+        const debugStatus = document.getElementById('debug-status');
+        const debugToken = document.getElementById('debug-token');
+        const debugAgent = document.getElementById('debug-agent');
+        
+        let currentConversation = null;
+        
+        // Update status
+        function updateStatus(message, type = 'info') {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            debugStatus.textContent = type;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+        
+        // Add message to conversation
+        function addMessage(text, isUser = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'agent-message'}`;
+            messageDiv.textContent = `${isUser ? 'You' : 'Assistant'}: ${text}`;
+            conversationDiv.appendChild(messageDiv);
+            conversationDiv.scrollTop = conversationDiv.scrollHeight;
+        }
+        
+        // Start conversation
+        async function startConversation() {
+            try {
+                updateStatus('Getting conversation token...', 'connecting');
+                
+                // Get token from server (like OpenAI sample)
+                const tokenResponse = await fetch('/token');
+                if (!tokenResponse.ok) {
+                    throw new Error(`Token request failed: ${tokenResponse.status}`);
+                }
+                
+                const { token } = await tokenResponse.json();
+                debugToken.textContent = token.substring(0, 20) + '...';
+                
+                updateStatus('Starting conversation session...', 'connecting');
+                
+                // Start conversation using ElevenLabs client (like OpenAI sample)
+                currentConversation = await Conversation.startSession({
+                    conversationToken: token,
+                    connectionType: 'webrtc' // Built-in echo cancellation
+                });
+                
+                // Set up event listeners
+                currentConversation.on('agentResponse', (e) => {
+                    console.log('Agent:', e.text);
+                    addMessage(e.text, false);
+                });
+                
+                currentConversation.on('userTranscript', (e) => {
+                    console.log('User:', e.text);
+                    addMessage(e.text, true);
+                });
+                
+                currentConversation.on('error', (error) => {
+                    console.error('Conversation error:', error);
+                    updateStatus(`Error: ${error.message}`, 'error');
+                });
+                
+                currentConversation.on('disconnect', () => {
+                    console.log('Conversation disconnected');
+                    updateStatus('Disconnected', 'error');
+                    resetUI();
+                });
+                
+                // Update UI
+                updateStatus('Connected! You can speak now.', 'connected');
+                startBtn.style.display = 'none';
+                stopBtn.style.display = 'block';
+                conversationDiv.style.display = 'block';
+                
+            } catch (error) {
+                console.error('Failed to start conversation:', error);
+                updateStatus(`Failed to start: ${error.message}`, 'error');
+            }
+        }
+        
+        // Stop conversation
+        function stopConversation() {
+            if (currentConversation) {
+                currentConversation.stop();
+                currentConversation = null;
+            }
+            resetUI();
+        }
+        
+        // Reset UI
+        function resetUI() {
+            startBtn.style.display = 'block';
+            stopBtn.style.display = 'none';
+            updateStatus('Ready to start', 'info');
+        }
+        
+        // Event listeners
+        startBtn.addEventListener('click', startConversation);
+        stopBtn.addEventListener('click', stopConversation);
+        
+        // Initialize
+        updateStatus('Ready to start', 'info');
+        
+        // Get server status
+        fetch('/status')
+            .then(response => response.json())
+            .then(data => {
+                debugAgent.textContent = data.agent_id || 'Not configured';
+                if (!data.agent_id) {
+                    updateStatus('Agent ID not configured', 'error');
+                }
+            })
+            .catch(error => {
+                debugAgent.textContent = 'Error loading';
+                console.error('Status check failed:', error);
+            });
+    </script>
+</body>
+</html>

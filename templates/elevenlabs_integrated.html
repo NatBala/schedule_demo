@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElevenLabs Voice Assistant - Integrated</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+        
+        .container {
+            text-align: center;
+            max-width: 800px;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        .title {
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.8;
+            margin-bottom: 30px;
+        }
+        
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            align-items: center;
+        }
+        
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 200px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: linear-gradient(135deg, #ff5252 0%, #ff1744 100%);
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            font-size: 1rem;
+        }
+        
+        .status.connecting {
+            background: rgba(255, 193, 7, 0.2);
+            color: #fff3cd;
+        }
+        
+        .status.connected {
+            background: rgba(40, 167, 69, 0.2);
+            color: #d4edda;
+        }
+        
+        .status.error {
+            background: rgba(220, 53, 69, 0.2);
+            color: #f8d7da;
+        }
+        
+        .conversation {
+            margin-top: 30px;
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            text-align: left;
+        }
+        
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 8px;
+            word-wrap: break-word;
+        }
+        
+        .user-message {
+            background: rgba(102, 126, 234, 0.3);
+            text-align: right;
+        }
+        
+        .agent-message {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .system-message {
+            background: rgba(255, 193, 7, 0.2);
+            font-style: italic;
+            text-align: center;
+        }
+        
+        .notifications {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            max-width: 300px;
+            z-index: 1000;
+        }
+        
+        .notification {
+            margin-bottom: 10px;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: 500;
+            animation: slideIn 0.3s ease;
+        }
+        
+        .notification.success {
+            background: rgba(40, 167, 69, 0.9);
+            color: white;
+        }
+        
+        .notification.error {
+            background: rgba(220, 53, 69, 0.9);
+            color: white;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .elevenlabs-badge {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            box-shadow: 0 4px 15px rgba(240, 147, 251, 0.3);
+        }
+        
+        .integration-status {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            font-size: 12px;
+            opacity: 0.7;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            max-width: 350px;
+        }
+        
+        .integration-status .status-item {
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .integration-status .status-indicator {
+            font-weight: 600;
+        }
+        
+        .status-indicator.enabled {
+            color: #4CAF50;
+        }
+        
+        .status-indicator.disabled {
+            color: #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <div class="elevenlabs-badge">ElevenLabs + Salesforce</div>
+    
+    <div id="notifications" class="notifications"></div>
+    
+    <div class="container">
+        <h1 class="title">Voice Assistant</h1>
+        <p class="subtitle">ElevenLabs + Full Salesforce/Email Integration</p>
+        
+        <div class="controls">
+            <button id="startBtn" class="btn btn-primary">Start Sales Call</button>
+            <button id="stopBtn" class="btn btn-danger" style="display: none;">End Call</button>
+        </div>
+        
+        <div id="status" class="status">Ready to start sales call</div>
+        
+        <div id="conversation" class="conversation" style="display: none;"></div>
+    </div>
+    
+    <div class="integration-status">
+        <div class="status-item">
+            <span>Server Status:</span>
+            <span id="server-status" class="status-indicator">Connecting...</span>
+        </div>
+        <div class="status-item">
+            <span>Email Integration:</span>
+            <span id="email-status" class="status-indicator">Loading...</span>
+        </div>
+        <div class="status-item">
+            <span>Salesforce:</span>
+            <span id="salesforce-status" class="status-indicator">Loading...</span>
+        </div>
+        <div class="status-item">
+            <span>Agent ID:</span>
+            <span id="agent-status" class="status-indicator">Loading...</span>
+        </div>
+    </div>
+
+    <!-- ElevenLabs Client SDK -->
+    <script type="module">
+        import { Conversation } from 'https://cdn.jsdelivr.net/npm/@elevenlabs/client/+esm';
+        
+        // UI Elements
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusDiv = document.getElementById('status');
+        const conversationDiv = document.getElementById('conversation');
+        const notificationsDiv = document.getElementById('notifications');
+        
+        // Status indicators
+        const serverStatus = document.getElementById('server-status');
+        const emailStatus = document.getElementById('email-status');
+        const salesforceStatus = document.getElementById('salesforce-status');
+        const agentStatus = document.getElementById('agent-status');
+        
+        let currentConversation = null;
+        let socket = null;
+        
+        // Initialize Socket.IO
+        function initializeSocket() {
+            socket = io();
+            
+            socket.on('connect', () => {
+                console.log('Connected to server');
+                serverStatus.textContent = 'Connected';
+                serverStatus.className = 'status-indicator enabled';
+            });
+            
+            socket.on('disconnect', () => {
+                console.log('Disconnected from server');
+                serverStatus.textContent = 'Disconnected';
+                serverStatus.className = 'status-indicator disabled';
+            });
+            
+            socket.on('notification', (data) => {
+                showNotification(data.message, data.type);
+            });
+            
+            socket.on('meeting_confirmed', (data) => {
+                addMessage(`🗓️ Meeting confirmed! Processing: ${JSON.stringify(data.meeting_info)}`, 'system');
+                showNotification('Meeting confirmed! Sending calendar invite...', 'success');
+            });
+            
+            socket.on('status', (data) => {
+                console.log('Server status:', data);
+            });
+        }
+        
+        // Show notification
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            notificationsDiv.appendChild(notification);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                notification.remove();
+            }, 5000);
+        }
+        
+        // Update status
+        function updateStatus(message, type = 'info') {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+        
+        // Add message to conversation
+        function addMessage(text, type = 'agent') {
+            const messageDiv = document.createElement('div');
+            let className = 'message ';
+            let prefix = '';
+            
+            switch(type) {
+                case 'user':
+                    className += 'user-message';
+                    prefix = 'You: ';
+                    break;
+                case 'agent':
+                    className += 'agent-message';
+                    prefix = 'Assistant: ';
+                    break;
+                case 'system':
+                    className += 'system-message';
+                    prefix = '🤖 ';
+                    break;
+            }
+            
+            messageDiv.className = className;
+            messageDiv.textContent = prefix + text;
+            conversationDiv.appendChild(messageDiv);
+            conversationDiv.scrollTop = conversationDiv.scrollHeight;
+        }
+        
+        // Start conversation
+        async function startConversation() {
+            try {
+                updateStatus('Getting conversation token...', 'connecting');
+                
+                // Get token from server (OpenAI sample approach)
+                console.log('Fetching token from server...');
+                const tokenResponse = await fetch('/token', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    }
+                });
+                if (!tokenResponse.ok) {
+                    throw new Error(`Token request failed: ${tokenResponse.status}`);
+                }
+                
+                const { token } = await tokenResponse.json();
+                
+                updateStatus('Starting ElevenLabs conversation...', 'connecting');
+                
+                // Start conversation using ElevenLabs client
+                console.log('Starting ElevenLabs conversation with token...');
+                
+                // Initialize with correct options for ElevenLabs
+                const conversationConfig = {
+                    conversationToken: token,
+                    debug: true // Enable debug logging
+                };
+                
+                console.log('Config:', conversationConfig);
+                
+                currentConversation = await Conversation.startSession(conversationConfig);
+                
+                // Set up event listeners
+                currentConversation.on('agentResponse', (e) => {
+                    console.log('Agent:', e.text);
+                    addMessage(e.text, 'agent');
+                    
+                    // Send to server for meeting detection
+                    if (socket) {
+                        socket.emit('agent_response', { text: e.text });
+                    }
+                });
+                
+                currentConversation.on('userTranscript', (e) => {
+                    console.log('User:', e.text);
+                    addMessage(e.text, 'user');
+                    
+                    // Send to server for tracking
+                    if (socket) {
+                        socket.emit('user_transcript', { text: e.text });
+                    }
+                });
+                
+                currentConversation.on('error', (error) => {
+                    console.error('Conversation error:', error);
+                    updateStatus(`Error: ${error.message}`, 'error');
+                    showNotification(`Conversation error: ${error.message}`, 'error');
+                });
+                
+                currentConversation.on('disconnect', () => {
+                    console.log('ElevenLabs conversation disconnected');
+                    updateStatus('Conversation ended', 'info');
+                    resetUI();
+                });
+                
+                // Update UI
+                updateStatus('🎙️ Sales call active! Speak naturally.', 'connected');
+                startBtn.style.display = 'none';
+                stopBtn.style.display = 'block';
+                conversationDiv.style.display = 'block';
+                
+                addMessage('Sales call started. I\'m Sarah, your American Funds ETF specialist. How can I help you today?', 'system');
+                
+            } catch (error) {
+                console.error('Failed to start conversation:', error);
+                updateStatus(`Failed to start: ${error.message}`, 'error');
+                showNotification(`Failed to start: ${error.message}`, 'error');
+            }
+        }
+        
+        // Stop conversation
+        function stopConversation() {
+            if (currentConversation) {
+                currentConversation.stop();
+                currentConversation = null;
+            }
+            resetUI();
+            addMessage('Sales call ended.', 'system');
+        }
+        
+        // Reset UI
+        function resetUI() {
+            startBtn.style.display = 'block';
+            stopBtn.style.display = 'none';
+            updateStatus('Ready to start sales call', 'info');
+        }
+        
+        // Event listeners
+        startBtn.addEventListener('click', startConversation);
+        stopBtn.addEventListener('click', stopConversation);
+        
+        // Initialize
+        initializeSocket();
+        updateStatus('Connecting to server...', 'connecting');
+        
+        // Get server status
+        fetch('/status')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Server status:', data);
+                
+                agentStatus.textContent = data.agent_id ? 'Configured' : 'Missing';
+                agentStatus.className = `status-indicator ${data.agent_id ? 'enabled' : 'disabled'}`;
+                
+                emailStatus.textContent = 'Enabled';
+                emailStatus.className = 'status-indicator enabled';
+                
+                salesforceStatus.textContent = data.salesforce_enabled ? 'Enabled' : 'Disabled';
+                salesforceStatus.className = `status-indicator ${data.salesforce_enabled ? 'enabled' : 'disabled'}`;
+                
+                if (!data.agent_id) {
+                    updateStatus('Agent ID not configured', 'error');
+                    showNotification('ElevenLabs agent not configured', 'error');
+                } else {
+                    updateStatus('Ready to start sales call', 'info');
+                }
+            })
+            .catch(error => {
+                console.error('Status check failed:', error);
+                updateStatus('Server connection failed', 'error');
+                serverStatus.textContent = 'Error';
+                serverStatus.className = 'status-indicator disabled';
+            });
+    </script>
+</body>
+</html>

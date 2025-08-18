@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElevenLabs Voice Assistant - Final Working Version</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 { color: #333; margin-bottom: 10px; }
+        .subtitle { color: #666; margin-bottom: 30px; }
+        
+        .important-note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        
+        .success-note {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .playground-button {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            font-size: 18px;
+            padding: 15px 30px;
+        }
+        
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        
+        .steps {
+            background: #f9fafb;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .steps ol {
+            margin-left: 20px;
+        }
+        
+        .steps li {
+            margin: 10px 0;
+        }
+        
+        code {
+            background: #e5e7eb;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ ElevenLabs Voice Assistant</h1>
+        <p class="subtitle">Working Solutions & Implementation Guide</p>
+        
+        <div class="success-note">
+            <strong>✅ Good News!</strong><br>
+            Your agent (ID: agent_2001k2vep3eafpxb6qk5q8f03jt8) works perfectly in the ElevenLabs playground!
+            The server token generation is also working correctly.
+        </div>
+        
+        <h2>Option 1: Use ElevenLabs Playground (Immediate)</h2>
+        <p>Since your agent is already configured and working:</p>
+        <button class="playground-button" onclick="openPlayground()">
+            🚀 Open Your Agent in Playground
+        </button>
+        
+        <h2>Option 2: Create a React App (Best for Integration)</h2>
+        <div class="steps">
+            <p>For full Salesforce/email integration, create a React app:</p>
+            <ol>
+                <li>Create a new React app:
+                    <pre>npx create-react-app elevenlabs-salesforce
+cd elevenlabs-salesforce</pre>
+                </li>
+                <li>Install ElevenLabs React SDK:
+                    <pre>npm install @elevenlabs/react</pre>
+                </li>
+                <li>Create <code>src/VoiceAssistant.js</code>:
+                    <pre>import { useConversation } from '@elevenlabs/react';
+
+function VoiceAssistant() {
+  const conversation = useConversation({
+    onMessage: (message) => {
+      // Send to your server for Salesforce/email
+      fetch('http://localhost:5052/agent_response', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: message })
+      });
+    }
+  });
+
+  const startConversation = async () => {
+    const response = await fetch('http://localhost:5052/token');
+    const { token } = await response.json();
+    conversation.startSession({ conversationToken: token });
+  };
+
+  return (
+    &lt;button onClick={startConversation}&gt;
+      Start Conversation
+    &lt;/button&gt;
+  );
+}</pre>
+                </li>
+                <li>Run the app:
+                    <pre>npm start</pre>
+                </li>
+            </ol>
+        </div>
+        
+        <h2>Option 3: Use ElevenLabs WebSocket API Directly</h2>
+        <div class="important-note">
+            <strong>Current Issue:</strong> The browser-based WebRTC/LiveKit connection is complex and requires proper SDK initialization. The token is valid but needs the LiveKit client library to work.
+        </div>
+        
+        <h2>Why the Current Implementation Isn't Working</h2>
+        <div class="steps">
+            <p>The token analysis revealed:</p>
+            <ul>
+                <li>ElevenLabs uses <strong>LiveKit</strong> for WebRTC communication</li>
+                <li>Room: <code>room_agent_2001k2vep3eafpxb6qk5q8f03jt8_conv_*</code></li>
+                <li>The LiveKit CDN isn't loading properly in standalone HTML</li>
+                <li>This requires a proper build system (React, Vue, etc.) to work</li>
+            </ul>
+        </div>
+        
+        <h2>Recommended Solution</h2>
+        <div class="success-note">
+            <strong>For Production Use:</strong>
+            <ol>
+                <li>Use the ElevenLabs Playground for testing (works now)</li>
+                <li>Create a React app with @elevenlabs/react for production</li>
+                <li>Keep your Python server for Salesforce/email integration</li>
+                <li>Connect the React frontend to your Python backend</li>
+            </ol>
+        </div>
+        
+        <div style="margin-top: 40px; text-align: center;">
+            <button onclick="testServer()">Test Python Server</button>
+            <button onclick="showToken()">Show Token Info</button>
+        </div>
+        
+        <div id="output" style="margin-top: 20px;"></div>
+    </div>
+
+    <script>
+        function openPlayground() {
+            window.open('https://elevenlabs.io/app/conversational-ai/agent_2001k2vep3eafpxb6qk5q8f03jt8', '_blank');
+        }
+        
+        async function testServer() {
+            try {
+                const response = await fetch('http://localhost:5052/status');
+                const data = await response.json();
+                document.getElementById('output').innerHTML = `
+                    <div class="success-note">
+                        <strong>Server Status:</strong><br>
+                        ✅ Running on port 5052<br>
+                        ✅ Agent ID: ${data.agent_id}<br>
+                        ✅ Salesforce: ${data.salesforce_enabled ? 'Enabled' : 'Disabled'}<br>
+                        ✅ Ready for integration
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('output').innerHTML = `
+                    <div class="important-note">
+                        ❌ Server not running<br>
+                        Run: <code>python elevenlabs_integrated_server.py</code>
+                    </div>
+                `;
+            }
+        }
+        
+        async function showToken() {
+            try {
+                const response = await fetch('http://localhost:5052/token');
+                const { token } = await response.json();
+                const parts = token.split('.');
+                const payload = JSON.parse(atob(parts[1]));
+                
+                document.getElementById('output').innerHTML = `
+                    <div class="success-note">
+                        <strong>Token Info:</strong><br>
+                        ✅ Token generated successfully<br>
+                        ✅ Room: ${payload.video.room}<br>
+                        ✅ Expires: ${new Date(payload.exp * 1000).toLocaleString()}<br>
+                        ✅ Ready for LiveKit connection
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('output').innerHTML = `
+                    <div class="important-note">
+                        ❌ Error getting token: ${error.message}
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

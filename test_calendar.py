@@ -6,14 +6,14 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 
-# AWS credentials
-ACCESS_KEY = "YOUR_AWS_ACCESS_KEY_HERE"
-SECRET_KEY = "YOUR_AWS_SECRET_KEY_HERE"
+# AWS credentials (REPLACE WITH YOUR OWN)
+ACCESS_KEY = "YOUR_AWS_ACCESS_KEY"
+SECRET_KEY = "YOUR_AWS_SECRET_KEY"
 REGION = "us-east-2"
 
-# Email addresses
-SENDER = "your_sender@email.com"
-RECIPIENT = "your_recipient@email.com"
+# Email addresses (HARDCODED FOR DEMO)
+SENDER = "achalshahkpmg@outlook.com"
+RECIPIENT = "nbalasubramanian1@KPMG.com"
 
 def create_ics_calendar_invite():
     # Tomorrow at 10 AM

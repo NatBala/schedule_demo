@@ -13,7 +13,9 @@
       "Bash(git remote set-url:*)",
       "Bash(pip install:*)",
       "Bash(git commit:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(powershell:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

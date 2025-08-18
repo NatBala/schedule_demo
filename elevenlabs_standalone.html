@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElevenLabs Direct Connection (No Server Needed)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .info {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        #status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        
+        .status-ready { background: #d4edda; color: #155724; }
+        .status-connecting { background: #fff3cd; color: #856404; }
+        .status-connected { background: #d1ecf1; color: #0c5460; }
+        .status-error { background: #f8d7da; color: #721c24; }
+        
+        #messages {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 20px 0;
+            background: #f9f9f9;
+        }
+        
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        .user { background: #e3f2fd; text-align: right; }
+        .agent { background: #f3e5f5; }
+        .system { background: #fff9c4; font-style: italic; }
+        
+        .warning {
+            background: #ff9800;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 ElevenLabs Direct Test</h1>
+        <p>This connects directly to ElevenLabs without needing a Python server.</p>
+        
+        <div class="info">
+            <strong>Configuration:</strong><br>
+            API Key: sk_4af9...6b69 (hardcoded)<br>
+            Agent ID: agent_2001k2vep3eafpxb6qk5q8f03jt8 (hardcoded)<br>
+            Method: Direct API call from browser
+        </div>
+        
+        <div class="warning">
+            ⚠️ This is for testing only! Never expose API keys in production.
+        </div>
+        
+        <div id="status" class="status-ready">Ready to connect</div>
+        
+        <div>
+            <button id="getTokenBtn" onclick="getToken()">1. Get Token</button>
+            <button id="startBtn" onclick="startConversation()" disabled>2. Start Conversation</button>
+            <button id="stopBtn" onclick="stopConversation()" disabled>3. Stop</button>
+        </div>
+        
+        <div id="messages"></div>
+        
+        <div class="info" id="debug">
+            <strong>Debug Info:</strong><br>
+            <div id="debugInfo">Waiting...</div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Hardcoded configuration (for testing only!)
+        const API_KEY = "sk_4af9424e5c505b27948bd17595e666c25a775eb3a2676b69";
+        const AGENT_ID = "agent_2001k2vep3eafpxb6qk5q8f03jt8";
+        
+        let conversationToken = null;
+        let conversation = null;
+        
+        window.addMessage = function(text, type = 'system') {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = text;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        window.updateStatus = function(text, type = 'ready') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = text;
+            statusDiv.className = `status-${type}`;
+        }
+        
+        window.updateDebug = function(info) {
+            document.getElementById('debugInfo').innerHTML = info;
+        }
+        
+        // Step 1: Get token directly from ElevenLabs API
+        window.getToken = async function() {
+            try {
+                updateStatus('Getting token from ElevenLabs...', 'connecting');
+                updateDebug('Calling ElevenLabs API...');
+                
+                // Direct API call with CORS proxy (for testing)
+                const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+                const apiUrl = `https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=${AGENT_ID}`;
+                
+                // First try without proxy
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'GET',
+                        headers: {
+                            'xi-api-key': API_KEY,
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        conversationToken = data.token;
+                        updateStatus('Token obtained!', 'connected');
+                        updateDebug(`Token: ${conversationToken.substring(0, 50)}...`);
+                        addMessage('✅ Token obtained successfully!', 'system');
+                        
+                        document.getElementById('getTokenBtn').disabled = true;
+                        document.getElementById('startBtn').disabled = false;
+                        return;
+                    }
+                } catch (corsError) {
+                    console.log('Direct call failed (CORS), trying with proxy...');
+                }
+                
+                // Try with CORS proxy
+                const proxyResponse = await fetch(proxyUrl + apiUrl, {
+                    method: 'GET',
+                    headers: {
+                        'xi-api-key': API_KEY,
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (proxyResponse.ok) {
+                    const data = await proxyResponse.json();
+                    conversationToken = data.token;
+                    updateStatus('Token obtained (via proxy)!', 'connected');
+                    updateDebug(`Token: ${conversationToken.substring(0, 50)}...`);
+                    addMessage('✅ Token obtained via CORS proxy!', 'system');
+                    
+                    document.getElementById('getTokenBtn').disabled = true;
+                    document.getElementById('startBtn').disabled = false;
+                } else {
+                    throw new Error(`API returned ${proxyResponse.status}`);
+                }
+                
+            } catch (error) {
+                updateStatus(`Error: ${error.message}`, 'error');
+                updateDebug(`Error: ${error.stack}`);
+                addMessage(`❌ Failed to get token: ${error.message}`, 'system');
+                
+                // Provide alternative
+                addMessage('💡 CORS is blocking direct API calls from browser.', 'system');
+                addMessage('💡 You need to run the Python server instead:', 'system');
+                addMessage('python elevenlabs_integrated_server.py', 'system');
+            }
+        }
+        
+        // Step 2: Start conversation with ElevenLabs SDK
+        window.startConversation = async function() {
+            if (!conversationToken) {
+                alert('No token! Get token first.');
+                return;
+            }
+            
+            try {
+                updateStatus('Loading ElevenLabs SDK...', 'connecting');
+                
+                // Dynamic import of ElevenLabs client
+                const { Conversation } = await import('https://cdn.jsdelivr.net/npm/@elevenlabs/client/+esm');
+                
+                updateStatus('Starting conversation...', 'connecting');
+                
+                conversation = await Conversation.startSession({
+                    conversationToken: conversationToken,
+                    connectionType: 'webrtc'
+                });
+                
+                // Set up event listeners
+                conversation.on('agentResponse', (e) => {
+                    console.log('Agent:', e.text);
+                    addMessage(`Agent: ${e.text}`, 'agent');
+                });
+                
+                conversation.on('userTranscript', (e) => {
+                    console.log('User:', e.text);
+                    addMessage(`You: ${e.text}`, 'user');
+                });
+                
+                conversation.on('error', (error) => {
+                    console.error('Error:', error);
+                    updateStatus(`Error: ${error.message}`, 'error');
+                    addMessage(`❌ Error: ${error.message}`, 'system');
+                });
+                
+                conversation.on('disconnect', () => {
+                    updateStatus('Disconnected', 'ready');
+                    addMessage('📞 Call ended', 'system');
+                    resetButtons();
+                });
+                
+                updateStatus('🎙️ Connected! Speak now...', 'connected');
+                addMessage('🎙️ Conversation started! Say hello!', 'system');
+                
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                
+            } catch (error) {
+                updateStatus(`Failed: ${error.message}`, 'error');
+                updateDebug(`Error: ${error.stack}`);
+                addMessage(`❌ Failed to start: ${error.message}`, 'system');
+            }
+        }
+        
+        // Step 3: Stop conversation
+        window.stopConversation = function() {
+            if (conversation) {
+                conversation.stop();
+                conversation = null;
+            }
+            updateStatus('Stopped', 'ready');
+            resetButtons();
+        }
+        
+        function resetButtons() {
+            document.getElementById('getTokenBtn').disabled = false;
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = true;
+            conversationToken = null;
+        }
+        
+        // Initialize
+        addMessage('👋 Welcome! This test page connects directly to ElevenLabs.', 'system');
+        addMessage('Click "Get Token" to start.', 'system');
+    </script>
+</body>
+</html>

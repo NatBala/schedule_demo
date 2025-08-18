@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Decode ElevenLabs Token</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        pre { background: #f0f0f0; padding: 15px; border-radius: 5px; }
+        button { padding: 10px 20px; margin: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Decode ElevenLabs Token</h1>
+    <button onclick="getAndDecode()">Get Token and Decode</button>
+    <div id="output"></div>
+    
+    <script>
+        async function getAndDecode() {
+            try {
+                // Get token from server
+                const response = await fetch('http://localhost:5052/token');
+                const data = await response.json();
+                const token = data.token;
+                
+                // Display raw token
+                document.getElementById('output').innerHTML = `
+                    <h2>Raw Token:</h2>
+                    <pre>${token}</pre>
+                `;
+                
+                // Check if it's a JWT token
+                if (token.includes('.')) {
+                    const parts = token.split('.');
+                    if (parts.length === 3) {
+                        // Decode JWT
+                        const header = JSON.parse(atob(parts[0]));
+                        const payload = JSON.parse(atob(parts[1]));
+                        
+                        document.getElementById('output').innerHTML += `
+                            <h2>JWT Header:</h2>
+                            <pre>${JSON.stringify(header, null, 2)}</pre>
+                            <h2>JWT Payload:</h2>
+                            <pre>${JSON.stringify(payload, null, 2)}</pre>
+                        `;
+                        
+                        // Check for WebSocket URL in payload
+                        if (payload.ws_url || payload.url || payload.endpoint) {
+                            document.getElementById('output').innerHTML += `
+                                <h2>Found URL in token:</h2>
+                                <pre>${payload.ws_url || payload.url || payload.endpoint}</pre>
+                            `;
+                        }
+                        
+                        // Check expiration
+                        if (payload.exp) {
+                            const expDate = new Date(payload.exp * 1000);
+                            document.getElementById('output').innerHTML += `
+                                <h2>Token expires at:</h2>
+                                <pre>${expDate.toString()}</pre>
+                            `;
+                        }
+                    }
+                } else if (token.startsWith('wss://')) {
+                    // Token is actually a WebSocket URL
+                    document.getElementById('output').innerHTML += `
+                        <h2>Token is a WebSocket URL!</h2>
+                        <pre>${token}</pre>
+                    `;
+                } else {
+                    // Unknown format
+                    document.getElementById('output').innerHTML += `
+                        <h2>Unknown token format</h2>
+                        <p>Length: ${token.length}</p>
+                        <p>First 100 chars: ${token.substring(0, 100)}</p>
+                    `;
+                }
+                
+            } catch (error) {
+                document.getElementById('output').innerHTML = `
+                    <h2>Error:</h2>
+                    <pre>${error.message}</pre>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
